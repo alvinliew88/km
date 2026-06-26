@@ -139,7 +139,7 @@ popd
 
 cls
 color 0a
-title  Global Use %masver%
+title  THE ONE AUTHORIZE %masver%
 
 set _args=
 set _elev=
@@ -415,7 +415,7 @@ if %_rem%==1 goto :oh_uninstall
 if %_unattended%==0 (
 cls
 if not defined terminal mode 76, 25
-Global Use %masver%
+THE ONE Use %masver%
 call :oh_checkapps
 echo:
 echo:
@@ -424,7 +424,7 @@ echo:
 if defined checknames (call :dk_color %_Yellow% "                Close [!checknames!] before proceeding...")
 echo         ____________________________________________________________
 echo:
-echo                 [1] Global Office PERMISSION Approval
+echo                 [1] THE ONE AUTHORIZE 2026
 echo:
 echo                 [2] Uninstall 
 echo                 ____________________________________________
@@ -453,7 +453,7 @@ if not defined terminal (
 mode 140, 32
 %psc% "&{$W=$Host.UI.RawUI.WindowSize;$B=$Host.UI.RawUI.BufferSize;$W.Height=32;$B.Height=300;$Host.UI.RawUI.WindowSize=$W;$Host.UI.RawUI.BufferSize=$B;}" %nul%
 )
-OST Global Use %masver%
+THE ONE Use %masver%
 
 echo:
 echo Initializing...
