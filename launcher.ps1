@@ -14,7 +14,12 @@ try { $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Obje
 
 # Password Verification
 $password = Read-Host "key" -AsSecureString
-$passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
+$passString = ""
+if ($password -ne $null -and $password.Length -gt 0) {
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+    $passString = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+}
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
@@ -41,18 +46,15 @@ Write-Host "$key" -ForegroundColor White
 
 if ($key -eq '0') { exit }
 
-# Action Logic (Ultimate Memory-Based Execution)
+# Action Logic (Ultimate execution using YOUR trusted link)
 function Invoke-Official {
     param($ArgsInput)
     Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
     
     try {
-        # Fetch the official wrapper which has built-in Bitbucket/Codeberg anti-404 fallbacks
-        $wrapper = Invoke-RestMethod -Uri 'https://get.activated.win' -UseBasicParsing -ErrorAction Stop
-        
-        # Execute the wrapper entirely in memory and pass the /HWID or /Ohook parameters
-        $sb = [ScriptBlock]::Create($wrapper)
-        Invoke-Command -ScriptBlock $sb -ArgumentList $ArgsInput
+        # [核心修复] 使用你提供的 100% 有效链接
+        # 包装在 ScriptBlock 中是为了自动将 /HWID 或 /Ohook 参数传递进去，从而跳过菜单直接执行！
+        & ([ScriptBlock]::Create((irm https://get.activated.win))) $ArgsInput
         
     } catch {
         Write-Host "  [-] Execution failed!" -ForegroundColor Red
@@ -72,7 +74,8 @@ switch ($key) {
     }
     '4' {
         Write-Host "`n  [+] Bypass..." -ForegroundColor Cyan
-        iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
+        # 选项4完美还原你手打的完整管道命令
+        irm https://get.activated.win | iex
     }
     default { exit }
 }
