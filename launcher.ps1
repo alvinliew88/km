@@ -38,27 +38,36 @@ while ($true) {
 
     if ($key -eq '0') { exit }
 
-    # Action Logic: Downloads via IRM and runs natively in this window
-    function Invoke-TheOne {
-        param($ArgsInput)
+    # Action Logic: Fetches original post, applies THE ONE brand, runs natively in SAME window
+    function Invoke-Official {
+        param($ArgsInput, $CustomTitle)
         Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
-        Write-Host "  [+] Establishing secure bridge via IRM..." -ForegroundColor Cyan
+        Write-Host "  [+] Establishing secure bridge to original source..." -ForegroundColor Cyan
         
         $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
-        $url = "https://raw.githubusercontent.com/alvinliew88/km/main/THE_ONE.cmd"
+        # Always fetches the latest official version to prevent it from being outdated
+        $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
         
         try {
-            # Download file cleanly via Invoke-RestMethod
-            Invoke-RestMethod -Uri $url -OutFile $tempPath -UseBasicParsing -ErrorAction Stop
+            $cmdContent = Invoke-RestMethod -Uri $url -UseBasicParsing -ErrorAction Stop
             
-            # Execute directly within the CURRENT admin window context
-            & cmd.exe /c $tempPath $ArgsInput
+            Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
-            # Cleanup temp files after execution completes
+            # Dynamic Patching: Colors, Titles, and Anti-Close 
+            $cmdContent = $cmdContent.Replace("color 07", "color 0B")
+            $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
+            $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close... & pause >nul & exit /b")
+            
+            Set-Content -Path $tempPath -Value $cmdContent -Encoding Ascii
+            
+            # [核心修复] Executes script INSIDE the current terminal (No flashing, no new windows)
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -NoNewWindow -Wait
+            
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
             
             Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
+            
         } catch {
             Write-Host "  [-] Execution failed!" -ForegroundColor Red
             Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Yellow
@@ -67,8 +76,8 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-TheOne "/HWID" }
-        '2' { Invoke-TheOne "/Ohook" }
+        '1' { Invoke-Official "/HWID" "THE ONE WINDOWS AUTHORIZED" }
+        '2' { Invoke-Official "/Ohook" "THE ONE OFFICE AUTHORIZED" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
             Get-ChildItem -Path $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
