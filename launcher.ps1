@@ -16,13 +16,18 @@ try {
 # Fetch local IP early
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 
-# INVISIBLE PASSWORD PROMPT (User sees nothing)
-$password = Read-Host "" -AsSecureString
+# PASSWORD PROMPT
+$password = Read-Host "key" -AsSecureString
 
-$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
-$passString = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+# Safeguard against empty password (just pressing Enter) to prevent red errors
+$passString = ""
+if ($password -ne $null -and $password.Length -gt 0) {
+    $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+    $passString = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+    [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+}
 
+# Security breach trigger
 if ($passString -ne "8888") {
     Write-Host "`n[!] CRITICAL SECURITY BREACH DETECTED" -ForegroundColor Red
     Write-Host "[!] CAMERA SCREENSHOT INTERCEPTED & SAVED" -ForegroundColor Red
@@ -105,9 +110,12 @@ Write-Host "`n  [+] Fetching secure payload from source..." -ForegroundColor Cya
 $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
 
 try {
-    # [CRITICAL FIX] Hardcoded to the absolute permanent official AIO URL to guarantee zero 404s
-    $targetUrl = "https://raw.githubusercontent.com/massgrave/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    # Dynamically extract the latest AIO CMD URL from official redirector to prevent 404 forever
+    $irmContent = Invoke-RestMethod -Uri 'https://get.activated.win' -UseBasicParsing -ErrorAction Stop
+    $targetUrl = ([regex]::Match($irmContent, 'https://raw\.githubusercontent\.com/\S+\.cmd')).Value
     
+    if (-not $targetUrl) { throw "Unable to resolve target URL." }
+
     # Download the actual script content
     $scriptContent = Invoke-RestMethod -Uri $targetUrl -ErrorAction Stop
     
@@ -115,10 +123,10 @@ try {
     $scriptContent = $scriptContent -replace 'color 07', 'color 0B'
     
     # 2. Replace generic MAS titles and Menus with THE ONE branding
-    $scriptContent = $scriptContent -ireplace 'title\s+MAS %masver%', 'title THE ONE AUTHORIZE %masver%'
-    $scriptContent = $scriptContent -ireplace 'HWID Activation', 'THE ONE WINDOWS AUTHORIZED'
-    $scriptContent = $scriptContent -ireplace 'Ohook Activation', 'THE ONE OFFICE AUTHORIZED'
-    $scriptContent = $scriptContent -ireplace 'Choose a menu option using your keyboard', 'Choose a menu. THE ONE AUTHORIZED'
+    $scriptContent = $scriptContent -replace 'title MAS %masver%', 'title THE ONE AUTHORIZE %masver%'
+    $scriptContent = $scriptContent -replace 'HWID Activation', 'THE ONE WINDOWS AUTHORIZED'
+    $scriptContent = $scriptContent -replace 'Ohook Activation', 'THE ONE OFFICE AUTHORIZED'
+    $scriptContent = $scriptContent -replace 'Choose a menu option using your keyboard', 'Choose a menu. THE ONE AUTHORIZED'
     
     Set-Content -Path $tempPath -Value $scriptContent -Encoding UTF8
     Write-Host "  [+] Payload injected. Launching interface..." -ForegroundColor White
