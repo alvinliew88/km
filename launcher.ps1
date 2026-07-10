@@ -12,17 +12,10 @@ $pcName = $env:COMPUTERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 try { $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress } catch { $macAddress = "UNKNOWN" }
 
-# PASSWORD PROMPT (Uses your required keygen input)
-$password = Read-Host "keygen" -AsSecureString
-$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
-$passString = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
-
-if ($passString -ne "8888") {
-    Write-Host "Wrong Password!" -ForegroundColor Red
-    Start-Sleep -Seconds 2
-    exit
-}
+# PASSWORD PROMPT (Uses your requested "key" input)
+$password = Read-Host "key" -AsSecureString
+$passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
+if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
 # UI DISPLAY
@@ -43,19 +36,21 @@ Write-Host "  [ 0 ] Exit Terminal" -ForegroundColor DarkGray
 Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
 Write-Host "`n  > Select module: " -NoNewline
 
+# One-touch selection
 $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
 Write-Host "$key" -ForegroundColor White
 
 if ($key -eq '0') { exit }
 
-# Action Logic (Integrated YOUR original download code)
+# Action Logic (Integrated YOUR trusted download code)
 function Invoke-Official {
     param($ArgsInput)
     
     Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
     
-    # Absolute URL to the official original post to prevent it from being outdated
-    $targetUrl = "https://raw.githubusercontent.com/massgrave/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    # THE CRITICAL FIX: "massgravel" (with an L) to prevent 404 errors!
+    # This points to the absolute original post, so it will NEVER be outdated.
+    $targetUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
     $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
     
     try {
