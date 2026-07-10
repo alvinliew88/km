@@ -13,13 +13,17 @@ try {
 } catch {}
 # ---------------------------------------------
 
-# Fetch local IP early
-$localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+# [FIXED] Safely fetch local IP without crashing older systems
+try {
+    $localIp = [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) | Where-Object { $_.AddressFamily -eq 'InterNetwork' } | Select-Object -First 1 | Select-Object -ExpandProperty IPAddressToString
+    if (-not $localIp) { $localIp = "Unknown" }
+} catch {
+    $localIp = "Unknown"
+}
 
-# PASSWORD PROMPT
+# INVISIBLE PASSWORD PROMPT (User sees nothing)
 $password = Read-Host "key" -AsSecureString
 
-# Safeguard against empty password (just pressing Enter) to prevent red errors
 $passString = ""
 if ($password -ne $null -and $password.Length -gt 0) {
     $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
@@ -27,7 +31,6 @@ if ($password -ne $null -and $password.Length -gt 0) {
     [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 }
 
-# Security breach trigger
 if ($passString -ne "8888") {
     Write-Host "`n[!] CRITICAL SECURITY BREACH DETECTED" -ForegroundColor Red
     Write-Host "[!] CAMERA SCREENSHOT INTERCEPTED & SAVED" -ForegroundColor Red
@@ -42,7 +45,6 @@ try {
     $publicIp = "Offline / Detected"
 }
 
-# Generate a fake session ID for IT professional look
 $sessionId = [guid]::NewGuid().ToString().ToUpper().Substring(0,18)
 
 # ---------------------------------------------------------
@@ -110,19 +112,16 @@ Write-Host "`n  [+] Fetching secure payload from source..." -ForegroundColor Cya
 $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
 
 try {
-    # Dynamically extract the latest AIO CMD URL from official redirector to prevent 404 forever
+    # Dynamically extract the latest AIO CMD URL
     $irmContent = Invoke-RestMethod -Uri 'https://get.activated.win' -UseBasicParsing -ErrorAction Stop
     $targetUrl = ([regex]::Match($irmContent, 'https://raw\.githubusercontent\.com/\S+\.cmd')).Value
     
     if (-not $targetUrl) { throw "Unable to resolve target URL." }
 
-    # Download the actual script content
     $scriptContent = Invoke-RestMethod -Uri $targetUrl -ErrorAction Stop
     
-    # 1. Adapt CMD color to Minima theme
     $scriptContent = $scriptContent -replace 'color 07', 'color 0B'
     
-    # 2. Replace generic MAS titles and Menus with THE ONE branding
     $scriptContent = $scriptContent -replace 'title MAS %masver%', 'title THE ONE AUTHORIZE %masver%'
     $scriptContent = $scriptContent -replace 'HWID Activation', 'THE ONE WINDOWS AUTHORIZED'
     $scriptContent = $scriptContent -replace 'Ohook Activation', 'THE ONE OFFICE AUTHORIZED'
