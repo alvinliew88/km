@@ -14,7 +14,7 @@ $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStrin
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
-# UI DISPLAY (Infinite Loop: Stays in Active Admin Window)
+# UI DISPLAY (Infinite Loop)
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
@@ -38,35 +38,47 @@ while ($true) {
 
     if ($key -eq '0') { exit }
 
-    # Action Logic: Fetches original post, applies THE ONE brand, runs natively in SAME window
-    function Invoke-Official {
+    # Core Execution Logic
+    function Invoke-TheOne {
         param($ArgsInput, $CustomTitle)
         Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
         Write-Host "  [+] Establishing secure bridge to original source..." -ForegroundColor Cyan
         
-        $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
-        # Always fetches the latest official version to prevent it from being outdated
-        $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+        $tempDir = "$env:TEMP\TheOneSystem"
+        if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
+        $tempScript = "$tempDir\RUN.cmd"
         
         try {
-            $cmdContent = Invoke-RestMethod -Uri $url -UseBasicParsing -ErrorAction Stop
+            # 1. 下载官方最新的 AIO 源码 (使用你验证过 100% 成功的途径)
+            $sourceCode = Invoke-RestMethod -Uri "https://get.activated.win" -UseBasicParsing -ErrorAction Stop
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
+
+            # 2. 构建本地外壳 (Wrapper)，这能完美保留排版，替换标题，并阻止退出
+            $wrapperCode = @"
+@echo off
+color 0B
+title $CustomTitle
+
+$sourceCode
+
+echo.
+echo   =================================================
+echo   [ THE ONE AUTHORIZED - Task Completed ]
+echo   =================================================
+echo   Press any key to close this window...
+pause >nul
+exit /b
+"@
+
+            # 将带有外壳的代码写入本地临时文件
+            Set-Content -Path $tempScript -Value $wrapperCode -Encoding Default
+
+            # 3. 在全新的窗口中执行，确保 100% 还原官方的字体间距和窗口大小
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempScript`" $ArgsInput -qedit" -Verb RunAs -Wait
             
-            # Dynamic Patching: Colors, Titles, and Anti-Close 
-            $cmdContent = $cmdContent.Replace("color 07", "color 0B")
-            $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
-            $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close... & pause >nul & exit /b")
-            
-            Set-Content -Path $tempPath -Value $cmdContent -Encoding Ascii
-            
-            # [核心修复] Executes script INSIDE the current terminal (No flashing, no new windows)
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -NoNewWindow -Wait
-            
-            Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
-            
-            Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
-            $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
+            # 执行完毕后清理
+            Remove-Item -Path $tempScript -Force -ErrorAction SilentlyContinue
             
         } catch {
             Write-Host "  [-] Execution failed!" -ForegroundColor Red
@@ -76,8 +88,8 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-Official "/HWID" "THE ONE WINDOWS AUTHORIZED" }
-        '2' { Invoke-Official "/Ohook" "THE ONE OFFICE AUTHORIZED" }
+        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED" }
+        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
             Get-ChildItem -Path $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
