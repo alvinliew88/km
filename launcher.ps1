@@ -1,30 +1,26 @@
-# launcher.ps1 - THE ONE SYSTEM v2.2 Bootstrapper
+# launcher.ps1 - THE ONE SYSTEM v2.3 (Conhost Pop-up Edition)
 # Authorized IT Execution Script
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# 定义临时文件的保存路径
 $tempScript = "$env:TEMP\TheOneMenu.ps1"
 
-# 将整个菜单系统的代码封装为一个字符串
 $menuCode = @'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# [UI 修复] 强制将这个新弹出的窗口调整为 98x30，完美还原原版菜单的精巧比例
+# Force classic window size 98x30 to match original fork perfectly
 try {
-    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.2"
+    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.3"
     $ws = $Host.UI.RawUI.WindowSize; $ws.Width = 98; $ws.Height = 30
     $bs = $Host.UI.RawUI.BufferSize; $bs.Width = 98; $bs.Height = 300
     $Host.UI.RawUI.WindowSize = $ws
     $Host.UI.RawUI.BufferSize = $bs
 } catch {}
 
-# Fetch Hardware Data
 $pcName = $env:COMPUTERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 try { $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress } catch { $macAddress = "UNKNOWN" }
 
-# Password Verification
 $password = Read-Host "key" -AsSecureString
 $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
@@ -34,7 +30,7 @@ if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor 
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.2" -ForegroundColor Cyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.3" -ForegroundColor Cyan
     Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  PC Name    : $pcName" -ForegroundColor White
@@ -54,7 +50,6 @@ while ($true) {
 
     if ($key -eq '0') { exit }
 
-    # Core Execution Logic
     function Invoke-TheOne {
         param($ArgsInput, $CustomTitle)
         Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
@@ -89,20 +84,15 @@ while ($true) {
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
             $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
-            
-            # 强制调整激活窗口的尺寸为 98x30，完美保留原版排版间距
             $cmdContent = $cmdContent -replace '(?m)^@echo off', "@echo off`r`nmode 98, 30"
             $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
-            
-            # 拦截自动退出，替换为等待提示
             $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
-            
             $cmdContent += "`r`n`r`n"
             
             [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
             
-            # 弹出全新的 CMD 窗口执行官方代码
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
+            # Use conhost.exe to force a classic standalone CMD window with perfect original font scaling
+            Start-Process -FilePath "conhost.exe" -ArgumentList "cmd.exe /c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
             
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
             
@@ -114,11 +104,10 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.2" }
-        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.2" }
+        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.3" }
+        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.3" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
-            # 安全删除临时文件，但保留当前正在运行的脚本，防止崩溃
             Get-ChildItem -Path $env:TEMP -Recurse -File -ErrorAction SilentlyContinue | 
                 Where-Object { $_.Name -ne 'TheOneMenu.ps1' -and $_.Name -ne 'THE_ONE_RUN.cmd' } | 
                 Remove-Item -Force -ErrorAction SilentlyContinue
@@ -136,8 +125,7 @@ while ($true) {
 }
 '@
 
-# 1. 把菜单写入到本地
 Set-Content -Path $tempScript -Value $menuCode -Encoding UTF8
 
-# 2. 弹出一个全新的独立 PowerShell 窗口来运行它，就像原版 MAS 一样！
-Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempScript`"" -Verb RunAs
+# The Magic Bullet: Force legacy console host to escape Windows Terminal tab hijacking
+Start-Process -FilePath "conhost.exe" -ArgumentList "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$tempScript`"" -Verb RunAs
