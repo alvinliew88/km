@@ -1,21 +1,10 @@
-# launcher.ps1 - THE ONE SYSTEM
+# launcher.ps1 - THE ONE SYSTEM v2.0
 # Authorized IT Execution Script
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# [UI 修复] 强制将 PowerShell 窗口调整为类似原版 MAS 的比例和间距，提升阅读体验
-try {
-    $Host.UI.RawUI.WindowTitle = "THE ONE AUTHORIZED [SYSTEM]"
-    $Host.UI.RawUI.BackgroundColor = "Black"
-    $Host.UI.RawUI.ForegroundColor = "White"
-    $ws = $Host.UI.RawUI.WindowSize
-    $ws.Width = 90
-    $ws.Height = 30
-    $Host.UI.RawUI.WindowSize = $ws
-    $bs = $Host.UI.RawUI.BufferSize
-    $bs.Width = 90
-    $Host.UI.RawUI.BufferSize = $bs
-} catch {}
+# [UI 修复] 强制调整 PowerShell 窗口为 76x25，完美复刻原版 MAS 的字体比例和间距！
+try { cmd.exe /c "mode 76, 25" } catch {}
 
 # Fetch Hardware Data
 $pcName = $env:COMPUTERNAME
@@ -28,11 +17,11 @@ $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStrin
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
-# UI DISPLAY (Infinite Loop)
+# UI DISPLAY (Infinite Loop: Never Auto-Closes)
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
-    Write-Host "`n  T H E   O N E   S Y S T E M S" -ForegroundColor Cyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.0" -ForegroundColor Cyan
     Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  PC Name    : $pcName" -ForegroundColor White
@@ -59,48 +48,45 @@ while ($true) {
         Write-Host "  [+] Establishing secure bridge to official source..." -ForegroundColor Cyan
         
         $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
-        $cmdContent = $null
-
+        
         try {
-            # [核心修复 1] 强力防 404 下载机制 (通过 Cloudflare DNS 强制解析)
+            # 1. 官方三大主干源，精准验证内容，杜绝一切假 404/Blocked 报错！
             $urls = @(
+                "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd",
                 "https://bitbucket.org/WindowsAddict/microsoft-activation-scripts/raw/master/MAS/All-In-One-Version/MAS_AIO.cmd",
-                "https://codeberg.org/massgravel/Microsoft-Activation-Scripts/raw/branch/master/MAS/All-In-One-Version/MAS_AIO.cmd",
-                "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+                "https://codeberg.org/massgravel/Microsoft-Activation-Scripts/raw/branch/master/MAS/All-In-One-Version/MAS_AIO.cmd"
             )
             
+            $cmdContent = $null
             foreach ($u in $urls) {
                 try {
-                    # 优先使用 curl 绕过 ISP 屏蔽
-                    $cmdContent = (curl.exe -sL --doh-url https://1.1.1.1/dns-query $u) -join "`n"
-                    if ($cmdContent.Length -gt 50000) { break }
-                } catch {}
-                
-                try {
-                    # 备用使用原生请求
-                    $cmdContent = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
-                    if ($cmdContent.Length -gt 50000) { break }
+                    $resp = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
+                    # 只要抓取到的代码包含官方标记 "masver"，就代表 100% 成功！
+                    if ($resp -match "masver") {
+                        $cmdContent = $resp
+                        break
+                    }
                 } catch {}
             }
             
-            if (-not $cmdContent -or $cmdContent.Length -lt 50000) { throw "All mirrors blocked." }
+            if (-not $cmdContent) { throw "All mirrors blocked by ISP. Use Option 4." }
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
-            # [核心修复 2] 行尾符修复，防止官方触发 LF Error 报错
+            # 2. 修复 Line Endings，防止原版脚本自毁报错
             $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
             
-            # [核心修复 3] 修改配色、强制覆盖标题、拦截闪退命令
+            # 3. 颜色、标题覆盖，并强制拦截自动闪退
             $cmdContent = $cmdContent.Replace("color 07", "color 0B")
             $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
             $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
             
             $cmdContent += "`r`n`r`n"
             
-            # 必须保存为 ASCII，否则会产生乱码和字间距过大的问题
-            Set-Content -Path $tempPath -Value $cmdContent -Encoding Ascii -Force
+            # 4. 强制存为标准 ASCII 格式，防止乱码导致字体宽大
+            [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
             
-            # [核心修复 4] 打开原汁原味的新 CMD 窗口，自动继承完美的字体和排版
+            # 5. 弹出全新独立窗口进行激活，完成后停住等你按键！
             Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
             
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
@@ -113,8 +99,8 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED" }
-        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED" }
+        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.0" }
+        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.0" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
             Start-Sleep -Seconds 2
