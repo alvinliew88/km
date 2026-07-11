@@ -3,6 +3,20 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# [UI 修复] 强制将 PowerShell 窗口调整为类似原版 MAS 的比例和间距，提升阅读体验
+try {
+    $Host.UI.RawUI.WindowTitle = "THE ONE AUTHORIZED [SYSTEM]"
+    $Host.UI.RawUI.BackgroundColor = "Black"
+    $Host.UI.RawUI.ForegroundColor = "White"
+    $ws = $Host.UI.RawUI.WindowSize
+    $ws.Width = 90
+    $ws.Height = 30
+    $Host.UI.RawUI.WindowSize = $ws
+    $bs = $Host.UI.RawUI.BufferSize
+    $bs.Width = 90
+    $Host.UI.RawUI.BufferSize = $bs
+} catch {}
+
 # Fetch Hardware Data
 $pcName = $env:COMPUTERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
@@ -14,7 +28,7 @@ $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStrin
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
-# UI DISPLAY (Infinite Loop: Stays open forever)
+# UI DISPLAY (Infinite Loop)
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
@@ -45,48 +59,48 @@ while ($true) {
         Write-Host "  [+] Establishing secure bridge to official source..." -ForegroundColor Cyan
         
         $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
-        
+        $cmdContent = $null
+
         try {
-            # 1. 智能备用源防 404 (Bitbucket -> Codeberg -> Github)
+            # [核心修复 1] 强力防 404 下载机制 (通过 Cloudflare DNS 强制解析)
             $urls = @(
                 "https://bitbucket.org/WindowsAddict/microsoft-activation-scripts/raw/master/MAS/All-In-One-Version/MAS_AIO.cmd",
                 "https://codeberg.org/massgravel/Microsoft-Activation-Scripts/raw/branch/master/MAS/All-In-One-Version/MAS_AIO.cmd",
                 "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
             )
             
-            $downloaded = $false
             foreach ($u in $urls) {
                 try {
-                    Invoke-WebRequest -Uri $u -OutFile $tempPath -UseBasicParsing -ErrorAction Stop
-                    if ((Get-Item $tempPath).Length -gt 50000) { 
-                        $downloaded = $true
-                        break 
-                    }
+                    # 优先使用 curl 绕过 ISP 屏蔽
+                    $cmdContent = (curl.exe -sL --doh-url https://1.1.1.1/dns-query $u) -join "`n"
+                    if ($cmdContent.Length -gt 50000) { break }
+                } catch {}
+                
+                try {
+                    # 备用使用原生请求
+                    $cmdContent = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
+                    if ($cmdContent.Length -gt 50000) { break }
                 } catch {}
             }
             
-            if (-not $downloaded) { throw "All dynamic mirrors failed to respond." }
+            if (-not $cmdContent -or $cmdContent.Length -lt 50000) { throw "All mirrors blocked." }
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
-            # 2. 读取官方源码
-            $cmdContent = [System.IO.File]::ReadAllText($tempPath, [System.Text.Encoding]::UTF8)
-            
-            # 3. 修复 Line Endings，防止官方自检报错
+            # [核心修复 2] 行尾符修复，防止官方触发 LF Error 报错
             $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
             
-            # 4. 品牌注入与防闪退拦截
+            # [核心修复 3] 修改配色、强制覆盖标题、拦截闪退命令
             $cmdContent = $cmdContent.Replace("color 07", "color 0B")
             $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
             $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
             
-            # 必须在末尾加两行空行以通过 MAS 的安全检查
             $cmdContent += "`r`n`r`n"
             
-            # 5. 【核心修复】强制以标准 ASCII 写入！彻底解决字体间距过大和闪退问题！
-            [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
+            # 必须保存为 ASCII，否则会产生乱码和字间距过大的问题
+            Set-Content -Path $tempPath -Value $cmdContent -Encoding Ascii -Force
             
-            # 6. 原汁原味地打开全新 CMD 窗口，自动调整窗口大小和排版
+            # [核心修复 4] 打开原汁原味的新 CMD 窗口，自动继承完美的字体和排版
             Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
             
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
@@ -103,7 +117,6 @@ while ($true) {
         '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
-            # 选项 3 恢复安全模式，不删除你的临时文件，只做显示
             Start-Sleep -Seconds 2
             Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
             Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
