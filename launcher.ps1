@@ -1,24 +1,33 @@
+# launcher.ps1 - THE ONE SYSTEM v2.2
+# Authorized IT Execution Script
+
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# 将你的主控菜单也同步为原版的精确比例 (98x30)
 try {
-    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.0"
-    $ws = $Host.UI.RawUI.WindowSize; $ws.Width = 76; $ws.Height = 25
-    $bs = $Host.UI.RawUI.BufferSize; $bs.Width = 76; $bs.Height = 300
+    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.2"
+    $ws = $Host.UI.RawUI.WindowSize; $ws.Width = 98; $ws.Height = 30
+    $bs = $Host.UI.RawUI.BufferSize; $bs.Width = 98; $bs.Height = 300
     $Host.UI.RawUI.WindowSize = $ws
     $Host.UI.RawUI.BufferSize = $bs
 } catch {}
 
+# Fetch Hardware Data
 $pcName = $env:COMPUTERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 try { $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress } catch { $macAddress = "UNKNOWN" }
 
+# Password Verification
 $password = Read-Host "key" -AsSecureString
 $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
+# ---------------------------------------------------------
+# UI DISPLAY (Infinite Loop)
+# ---------------------------------------------------------
 while ($true) {
     Clear-Host
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.0" -ForegroundColor Cyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.2" -ForegroundColor Cyan
     Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  PC Name    : $pcName" -ForegroundColor White
@@ -38,6 +47,7 @@ while ($true) {
 
     if ($key -eq '0') { exit }
 
+    # Core Execution Logic
     function Invoke-TheOne {
         param($ArgsInput, $CustomTitle)
         Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
@@ -54,28 +64,43 @@ while ($true) {
             
             $cmdContent = $null
             foreach ($u in $urls) {
+                # 强力防 ISP 屏蔽：优先使用 curl + 1.1.1.1 DNS 进行抓取
                 try {
-                    $resp = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
-                    if ($resp -match "masver") {
-                        $cmdContent = $resp
-                        break
-                    }
+                    $resp = (curl.exe -sL --doh-url https://1.1.1.1/dns-query $u) -join "`n"
+                    if ($resp -match "masver") { $cmdContent = $resp; break }
                 } catch {}
+                
+                # 备用：常规拉取
+                if (-not $cmdContent) {
+                    try {
+                        $resp = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
+                        if ($resp -match "masver") { $cmdContent = $resp; break }
+                    } catch {}
+                }
             }
             
             if (-not $cmdContent) { throw "All mirrors blocked by ISP." }
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
+            # 修复换行符，防止原版脚本触发 LF 安全自检
             $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
-            $cmdContent = $cmdContent -replace '@echo off', "@echo off`r`nmode 76, 25"
-            $cmdContent = $cmdContent.Replace("color 07", "color 0B")
+            
+            # [核心修复]：强行在脚本顶端注入 mode 98, 30。这会强制窗口在自动执行时也保持 100% 的原版精致尺寸！
+            $cmdContent = $cmdContent -replace '(?m)^@echo off', "@echo off`r`nmode 98, 30"
+            
+            # 抹除原版标题，强制注入你的品牌标题 (且不再干涉原本的颜色设定，保留纯粹的原版味道)
             $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
+            
+            # 拦截原版的 2 秒闪退，替换为你的专属完成提示并等待按键
             $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
+            
             $cmdContent += "`r`n`r`n"
             
+            # 强制使用 ASCII 保存，消除任何导致排版错乱的宽字符间距
             [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
             
+            # 启动！这会弹出一个与你截图右侧 1:1 像素级复刻的完美窗口
             Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
             
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
@@ -88,8 +113,8 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.0" }
-        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.0" }
+        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.2" }
+        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.2" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
             Start-Sleep -Seconds 2
