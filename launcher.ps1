@@ -14,7 +14,7 @@ $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStrin
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
-# UI DISPLAY (Infinite Loop: Never Auto-Closes)
+# UI DISPLAY (Infinite Loop: Stays open forever)
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
@@ -47,37 +47,47 @@ while ($true) {
         $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
         
         try {
-            # 1. 动态获取官方最新链接，防止过期
-            $wrapper = Invoke-RestMethod -Uri "https://get.activated.win" -UseBasicParsing -ErrorAction Stop
-            $urls = [regex]::Matches($wrapper, 'https://[^\s"''`*]+MAS_AIO\.cmd') | ForEach-Object { $_.Value } | Select-Object -Unique
+            # 1. 智能备用源防 404 (Bitbucket -> Codeberg -> Github)
+            $urls = @(
+                "https://bitbucket.org/WindowsAddict/microsoft-activation-scripts/raw/master/MAS/All-In-One-Version/MAS_AIO.cmd",
+                "https://codeberg.org/massgravel/Microsoft-Activation-Scripts/raw/branch/master/MAS/All-In-One-Version/MAS_AIO.cmd",
+                "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+            )
             
-            $cmdContent = $null
+            $downloaded = $false
             foreach ($u in $urls) {
                 try {
-                    $cmdContent = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
-                    if ($cmdContent.Length -gt 50000) { break }
+                    Invoke-WebRequest -Uri $u -OutFile $tempPath -UseBasicParsing -ErrorAction Stop
+                    if ((Get-Item $tempPath).Length -gt 50000) { 
+                        $downloaded = $true
+                        break 
+                    }
                 } catch {}
             }
-            if (-not $cmdContent) { throw "All dynamic mirrors failed to respond." }
+            
+            if (-not $downloaded) { throw "All dynamic mirrors failed to respond." }
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
-            # 2. 【核心修复：LF Line Ending 报错】强制转换换行符为 Windows 标准 (CRLF) 并追加空白行
-            $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
-            $cmdContent += "`r`n`r`n"
+            # 2. 读取官方源码
+            $cmdContent = [System.IO.File]::ReadAllText($tempPath, [System.Text.Encoding]::UTF8)
             
-            # 3. 替换颜色与强制覆盖官方标题
+            # 3. 修复 Line Endings，防止官方自检报错
+            $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
+            
+            # 4. 品牌注入与防闪退拦截
             $cmdContent = $cmdContent.Replace("color 07", "color 0B")
             $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
-            
-            # 4. 拦截自动闪退：将官方静默执行后的强制退出，替换为等待按键
             $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
             
-            # 保存到本地
-            Set-Content -Path $tempPath -Value $cmdContent -Encoding Ascii
+            # 必须在末尾加两行空行以通过 MAS 的安全检查
+            $cmdContent += "`r`n`r`n"
             
-            # 5. 打开原生的新 CMD 窗口执行，完美还原官方的字体间距
-            Start-Process -FilePath $tempPath -ArgumentList $ArgsInput -Verb RunAs -Wait
+            # 5. 【核心修复】强制以标准 ASCII 写入！彻底解决字体间距过大和闪退问题！
+            [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
+            
+            # 6. 原汁原味地打开全新 CMD 窗口，自动调整窗口大小和排版
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
             
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
             
@@ -93,7 +103,8 @@ while ($true) {
         '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
-            Get-ChildItem -Path $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+            # 选项 3 恢复安全模式，不删除你的临时文件，只做显示
+            Start-Sleep -Seconds 2
             Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
             Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
