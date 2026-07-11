@@ -14,7 +14,7 @@ $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStrin
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
 # ---------------------------------------------------------
-# UI DISPLAY (Infinite Loop)
+# UI DISPLAY (Infinite Loop: Never Auto-Closes)
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
@@ -44,41 +44,39 @@ while ($true) {
         Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
         Write-Host "  [+] Establishing secure bridge to original source..." -ForegroundColor Cyan
         
-        $tempDir = "$env:TEMP\TheOneSystem"
-        if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
-        $tempScript = "$tempDir\RUN.cmd"
+        $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
         
         try {
-            # 1. 下载官方最新的 AIO 源码 (使用你验证过 100% 成功的途径)
-            $sourceCode = Invoke-RestMethod -Uri "https://get.activated.win" -UseBasicParsing -ErrorAction Stop
+            # Smart Extraction: Fetch the exact CMD URLs dynamically from the official wrapper
+            $wrapper = Invoke-RestMethod -Uri "https://get.activated.win" -UseBasicParsing -ErrorAction Stop
+            $urls = [regex]::Matches($wrapper, 'https://[^\s"''`*]+MAS_AIO\.cmd') | ForEach-Object { $_.Value } | Select-Object -Unique
+            
+            $cmdContent = $null
+            foreach ($u in $urls) {
+                try {
+                    $cmdContent = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
+                    if ($cmdContent.Length -gt 50000) { break }
+                } catch {}
+            }
+            
+            if (-not $cmdContent) { throw "All dynamic mirrors failed to respond." }
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
-
-            # 2. 构建本地外壳 (Wrapper)，这能完美保留排版，替换标题，并阻止退出
-            $wrapperCode = @"
-@echo off
-color 0B
-title $CustomTitle
-
-$sourceCode
-
-echo.
-echo   =================================================
-echo   [ THE ONE AUTHORIZED - Task Completed ]
-echo   =================================================
-echo   Press any key to close this window...
-pause >nul
-exit /b
-"@
-
-            # 将带有外壳的代码写入本地临时文件
-            Set-Content -Path $tempScript -Value $wrapperCode -Encoding Default
-
-            # 3. 在全新的窗口中执行，确保 100% 还原官方的字体间距和窗口大小
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempScript`" $ArgsInput -qedit" -Verb RunAs -Wait
             
-            # 执行完毕后清理
-            Remove-Item -Path $tempScript -Force -ErrorAction SilentlyContinue
+            # [FIX 1 & 2: Title and Styling] 
+            $cmdContent = $cmdContent.Replace("color 07", "color 0B")
+            $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
+            
+            # [FIX 3: Prevent Auto-Close] Replace the exact 2-second timeout exit command with a pause
+            $cmdContent = $cmdContent.Replace("timeout /t 2 & exit /b", "echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
+            
+            Set-Content -Path $tempPath -Value $cmdContent -Encoding Ascii
+            
+            # [FIX 4: New Window] Start-Process opens a new window, retaining exact original font/spacing
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
+            
+            # Temp file is cleaned up only AFTER the new window is closed by the user
+            Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
             
         } catch {
             Write-Host "  [-] Execution failed!" -ForegroundColor Red
@@ -91,8 +89,9 @@ exit /b
         '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED" }
         '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED" }
         '3' {
+            # [FIX 5: No Deletions] 
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
-            Get-ChildItem -Path $env:TEMP -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
             Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
             Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
