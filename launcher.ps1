@@ -1,44 +1,23 @@
-# launcher.ps1 - THE ONE SYSTEM v2.6 (Bulletproof Fetcher)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Pure Native Clone)
 # Authorized IT Execution Script
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-# 1. Create a secure temporary directory
-$tempDir = "$env:TEMP\TheOneSystem"
-if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
-
-$menuPs1 = "$tempDir\Menu.ps1"
-$menuCmd = "$tempDir\Launcher.cmd"
-
-# 2. Core Menu Logic (Executed in the standalone window)
-$menuCode = @'
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-# Force classic window size 98x30 to perfectly match the original MAS layout
-try {
-    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.6"
-    $ws = $Host.UI.RawUI.WindowSize; $ws.Width = 98; $ws.Height = 30
-    $bs = $Host.UI.RawUI.BufferSize; $bs.Width = 98; $bs.Height = 300
-    $Host.UI.RawUI.WindowSize = $ws
-    $Host.UI.RawUI.BufferSize = $bs
-} catch {}
 
 $pcName = $env:COMPUTERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 try { $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress } catch { $macAddress = "UNKNOWN" }
 
-# Prompt for password in the new independent window
+# Password Verification
 $password = Read-Host "key" -AsSecureString
 $passString = if($password){[System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep -Seconds 2; exit }
 
+# ---------------------------------------------------------
+# UI DISPLAY (Infinite Loop)
+# ---------------------------------------------------------
 while ($true) {
-    # Ensure pure colors during loop refreshes
-    [Console]::BackgroundColor = "Black"
-    [Console]::ForegroundColor = "White"
     Clear-Host
-
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.6" -ForegroundColor Cyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v3.1" -ForegroundColor Cyan
     Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  PC Name    : $pcName" -ForegroundColor White
@@ -58,61 +37,32 @@ while ($true) {
 
     if ($key -eq '0') { exit }
 
-    function Invoke-TheOne {
-        param($ArgsInput, $CustomTitle)
+    # Option 4's Exact Fetching & Execution Logic
+    function Invoke-NativeClone {
+        param($ScriptURL, $CustomTitle)
         Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
-        Write-Host "  [+] Establishing secure bridge to official source..." -ForegroundColor Cyan
         
-        $tempPath = "$env:TEMP\TheOneSystem\RUN.cmd"
-        $cmdContent = $null
+        $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
         
         try {
-            # STAGE 1: Dynamically intercept the unblocked get.activated.win wrapper and parse its mirrors
-            try {
-                $wrapper = Invoke-RestMethod -Uri "https://get.activated.win" -UseBasicParsing -ErrorAction Stop
-                $urls = [regex]::Matches($wrapper, 'https://[^\s"''`*]+\.cmd') | ForEach-Object { $_.Value } | Select-Object -Unique
-                
-                foreach ($u in $urls) {
-                    if ($u -match "MAS_AIO.cmd") {
-                        $cmdContent = (New-Object System.Net.WebClient).DownloadString($u)
-                        if ($cmdContent -match "masver") { break }
-                    }
-                }
-            } catch {}
-
-            # STAGE 2: Fallback to the official anti-censorship mirror and standard domains
-            if (-not $cmdContent -or $cmdContent -notmatch "masver") {
-                $fallbackUrls = @(
-                    "https://git.activated.win/massgravel/Microsoft-Activation-Scripts/raw/branch/master/MAS/All-In-One-Version/MAS_AIO.cmd",
-                    "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd",
-                    "https://bitbucket.org/WindowsAddict/microsoft-activation-scripts/raw/master/MAS/All-In-One-Version/MAS_AIO.cmd",
-                    "https://codeberg.org/massgravel/Microsoft-Activation-Scripts/raw/branch/master/MAS/All-In-One-Version/MAS_AIO.cmd"
-                )
-                foreach ($u in $fallbackUrls) {
-                    try {
-                        $cmdContent = (New-Object System.Net.WebClient).DownloadString($u)
-                        if ($cmdContent -match "masver") { break }
-                    } catch {}
-                }
-            }
+            # 1. 100% 复制 Option 4 的底层逻辑：使用 curl 和 Cloudflare DNS 强制拉取，无视任何 ISP 屏蔽
+            $rawText = (curl.exe -sL --doh-url https://1.1.1.1/dns-query $ScriptURL) -join "`r`n"
             
-            if (-not $cmdContent -or $cmdContent -notmatch "masver") { throw "All mirrors blocked by ISP." }
+            if (-not ($rawText -match "masver")) { throw "ISP blocked the download. Cloudflare DoH failed." }
             
-            Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
+            # 2. 极简修改：只用正则替换官方代码里的 title 这一行，其余几万行原封不动！
+            $rawText = $rawText -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
             
-            # Safe anti-self-destruct injection and title override
-            $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
-            $cmdContent = $cmdContent -replace '(?m)^@echo off', "@echo off`r`nmode 98, 30"
-            $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
-            $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to return to menu... & pause >nul & exit /b")
-            $cmdContent += "`r`n`r`n"
+            # 3. 完美保存：使用最纯净的 ASCII 编码直接写入物理硬盘，彻底杜绝乱码和 LF 报错
+            [System.IO.File]::WriteAllBytes($tempPath, [System.Text.Encoding]::ASCII.GetBytes($rawText))
             
-            [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
+            # 4. 原生启动：不加任何干涉参数，让脚本以系统默认方式双击启动。
+            # 原版脚本内部自带的 conhost.exe 越狱机制会自动生效，弹出一个拥有完美字体和间距的全新黑框！
+            Start-Process -FilePath $tempPath
             
-            # Execute the activation script inside this EXACT window layout without popping another one
-            Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Wait -NoNewWindow
-            
-            Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
+            # 延时 3 秒再清理临时文件，确保弹出的新窗口有充足的时间读取它
+            Start-Sleep -Seconds 3
+            Remove-Item -Path $tempPath -Force -ErrorAction SilentlyContinue
             
         } catch {
             Write-Host "  [-] Execution failed!" -ForegroundColor Red
@@ -122,8 +72,14 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.6" }
-        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.6" }
+        '1' { 
+            # 直接拉取纯净的独立版 HWID 脚本
+            Invoke-NativeClone "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/HWID_Activation.cmd" "THE ONE WINDOWS AUTHORIZED v3.1" 
+        }
+        '2' { 
+            # 直接拉取纯净的独立版 Ohook 脚本，打开后就是选项 1 和 2 的原版菜单
+            Invoke-NativeClone "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Ohook_Activation_AIO.cmd" "THE ONE OFFICE AUTHORIZED v3.1" 
+        }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
             Start-Sleep -Seconds 2
@@ -133,44 +89,8 @@ while ($true) {
         }
         '4' {
             Write-Host "`n  [+] Bypass..." -ForegroundColor Cyan
+            # 完全原始的 Option 4 代码，提供双重保障
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
-            Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
-            $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
         }
     }
 }
-'@
-
-# 3. Official Terminal Bypass Wrapper with Safety Lock
-$cmdWrapper = @"
-@echo off
-setlocal EnableDelayedExpansion
-
-:: [SAFETY LOCK]: Instantly breaks infinite loop bombs
-if "%~1"=="-qedit" goto :skipQE
-
-:: Force detect Windows Terminal and escape to conhost
-set terminal=
-set lines=0
-for /f "skip=3 tokens=* delims=" %%A in ('mode con') do if "!lines!"=="0" (
-    for %%B in (%%A) do set lines=%%B
-)
-if !lines! GEQ 100 set terminal=1
-
-if defined terminal (
-    start conhost.exe "%~f0" -qedit
-    exit /b
-)
-
-:skipQE
-:: Launch the PowerShell menu in the perfectly sized new window
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$menuPs1"
-exit /b
-"@
-
-# 4. Generate bootstrapper files
-Set-Content -Path $menuPs1 -Value $menuCode -Encoding UTF8
-[System.IO.File]::WriteAllText($menuCmd, $cmdWrapper, [System.Text.Encoding]::ASCII)
-
-# 5. Instantly launch the new window (freeing the current terminal)
-Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$menuCmd`""
