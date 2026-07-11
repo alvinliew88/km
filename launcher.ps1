@@ -25,38 +25,32 @@ if ($passString -ne "8888") {
 }
 
 # ---------------------------------------------------------
-# Helper Function: Download, modify title, and execute a .cmd script
+# Download a script from YOUR repo, save to temp, and execute
 # ---------------------------------------------------------
-function Invoke-NativeClone {
+function Invoke-OwnScript {
     param(
-        [string]$ScriptURL,
-        [string]$CustomTitle
+        [string]$ScriptName,   # e.g. "HWID_Activation.cmd"
+        [string]$CustomTitle   # Already in the file, but shown for logging
     )
 
     Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
 
-    $tempPath = "$env:TEMP\THE_ONE_RUN.cmd"
+    $tempPath = "$env:TEMP\$ScriptName"
+    # !!! REPLACE WITH YOUR ACTUAL REPO URL !!!
+    $repoBase = "https://raw.githubusercontent.com/你的用户名/仓库名/main"
 
     try {
-        # Download the raw script via curl with Cloudflare DoH (bypass ISP blocks)
-        $rawBytes = curl.exe -sL --doh-url https://1.1.1.1/dns-query $ScriptURL
-        if (-not $rawBytes) { throw "Download failed, empty response." }
-
-        # Convert to string and normalize line endings to CRLF
-        $rawText = [System.Text.Encoding]::UTF8.GetString($rawBytes) -replace '\r?\n', "`r`n"
-
-        if ($rawText -notmatch "masver") {
-            throw "ISP blocked or invalid script (masver marker missing)."
+        # Download the script from YOUR repository
+        $rawText = & curl.exe -sSfL --doh-url https://1.1.1.1/dns-query "$repoBase/$ScriptName" | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to download $ScriptName from your repo."
         }
 
-        # Replace ONLY the 'title' line (first occurrence) to keep original script intact
-        $rawText = $rawText -replace '(?im)^\s*title\s+.*$', "title $CustomTitle"
-
-        # Save as UTF-8 without BOM (preserves special characters like ✔)
+        # Save with UTF-8 without BOM (preserves special characters)
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($tempPath, $rawText, $utf8NoBom)
 
-        # Launch the .cmd file – the original script's conhost mechanics will take over
+        # Launch the .cmd file – opens a new console window with your custom title
         Start-Process -FilePath $tempPath
 
         Start-Sleep -Seconds 3
@@ -70,7 +64,7 @@ function Invoke-NativeClone {
 }
 
 # ---------------------------------------------------------
-# UI Loop (Green Theme)
+# Main Menu Loop (Green Theme)
 # ---------------------------------------------------------
 while ($true) {
     Clear-Host
@@ -96,19 +90,12 @@ while ($true) {
 
     switch ($key) {
         '1' {
-            # Windows activation: separate HWID script
-            Invoke-NativeClone `
-                "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/HWID_Activation.cmd" `
-                "THE ONE WINDOWS AUTHORIZED v3.1"
+            Invoke-OwnScript -ScriptName "HWID_Activation.cmd" -CustomTitle "THE ONE WINDOWS AUTHORIZED v3.1"
         }
         '2' {
-            # Office activation: Ohook AIO script
-            Invoke-NativeClone `
-                "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Ohook_Activation_AIO.cmd" `
-                "THE ONE OFFICE AUTHORIZED v3.1"
+            Invoke-OwnScript -ScriptName "Ohook_Activation_AIO.cmd" -CustomTitle "THE ONE OFFICE AUTHORIZED v3.1"
         }
         '3' {
-            # PC optimization: clear temp files
             Write-Host "`n  [+] Cleaning temporary files..." -ForegroundColor Green
             $tempFolders = @($env:TEMP, "$env:SystemRoot\Temp")
             foreach ($folder in $tempFolders) {
@@ -122,7 +109,6 @@ while ($true) {
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
         }
         '4' {
-            # Original MAS via Cloudflare DoH (exactly as provided)
             Write-Host "`n  [+] Bypassing..." -ForegroundColor Green
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
         }
