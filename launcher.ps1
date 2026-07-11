@@ -1,9 +1,16 @@
-# launcher.ps1 - THE ONE SYSTEM v2.2
+# launcher.ps1 - THE ONE SYSTEM v2.2 Bootstrapper
 # Authorized IT Execution Script
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# 将你的主控菜单也同步为原版的精确比例 (98x30)
+# 定义临时文件的保存路径
+$tempScript = "$env:TEMP\TheOneMenu.ps1"
+
+# 将整个菜单系统的代码封装为一个字符串
+$menuCode = @'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+# [UI 修复] 强制将这个新弹出的窗口调整为 98x30，完美还原原版菜单的精巧比例
 try {
     $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.2"
     $ws = $Host.UI.RawUI.WindowSize; $ws.Width = 98; $ws.Height = 30
@@ -64,13 +71,11 @@ while ($true) {
             
             $cmdContent = $null
             foreach ($u in $urls) {
-                # 强力防 ISP 屏蔽：优先使用 curl + 1.1.1.1 DNS 进行抓取
                 try {
                     $resp = (curl.exe -sL --doh-url https://1.1.1.1/dns-query $u) -join "`n"
                     if ($resp -match "masver") { $cmdContent = $resp; break }
                 } catch {}
                 
-                # 备用：常规拉取
                 if (-not $cmdContent) {
                     try {
                         $resp = Invoke-RestMethod -Uri $u -UseBasicParsing -ErrorAction Stop
@@ -83,24 +88,20 @@ while ($true) {
             
             Write-Host "  [+] Injecting THE ONE Authority..." -ForegroundColor Cyan
             
-            # 修复换行符，防止原版脚本触发 LF 安全自检
             $cmdContent = $cmdContent -replace "`r`n", "`n" -replace "`n", "`r`n"
             
-            # [核心修复]：强行在脚本顶端注入 mode 98, 30。这会强制窗口在自动执行时也保持 100% 的原版精致尺寸！
+            # 强制调整激活窗口的尺寸为 98x30，完美保留原版排版间距
             $cmdContent = $cmdContent -replace '(?m)^@echo off', "@echo off`r`nmode 98, 30"
-            
-            # 抹除原版标题，强制注入你的品牌标题 (且不再干涉原本的颜色设定，保留纯粹的原版味道)
             $cmdContent = $cmdContent -replace '(?im)^\s*title\s+.*', "title $CustomTitle"
             
-            # 拦截原版的 2 秒闪退，替换为你的专属完成提示并等待按键
+            # 拦截自动退出，替换为等待提示
             $cmdContent = $cmdContent.Replace("if %_unattended%==1 timeout /t 2 & exit /b", "if %_unattended%==1 echo. & echo   [ THE ONE AUTHORIZED - Task Completed ] & echo   Press any key to close this window... & pause >nul & exit /b")
             
             $cmdContent += "`r`n`r`n"
             
-            # 强制使用 ASCII 保存，消除任何导致排版错乱的宽字符间距
             [System.IO.File]::WriteAllText($tempPath, $cmdContent, [System.Text.Encoding]::ASCII)
             
-            # 启动！这会弹出一个与你截图右侧 1:1 像素级复刻的完美窗口
+            # 弹出全新的 CMD 窗口执行官方代码
             Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempPath`" $ArgsInput" -Verb RunAs -Wait
             
             Remove-Item -Path $tempPath -ErrorAction SilentlyContinue
@@ -117,7 +118,10 @@ while ($true) {
         '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.2" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
-            Start-Sleep -Seconds 2
+            # 安全删除临时文件，但保留当前正在运行的脚本，防止崩溃
+            Get-ChildItem -Path $env:TEMP -Recurse -File -ErrorAction SilentlyContinue | 
+                Where-Object { $_.Name -ne 'TheOneMenu.ps1' -and $_.Name -ne 'THE_ONE_RUN.cmd' } | 
+                Remove-Item -Force -ErrorAction SilentlyContinue
             Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
             Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
@@ -130,3 +134,10 @@ while ($true) {
         }
     }
 }
+'@
+
+# 1. 把菜单写入到本地
+Set-Content -Path $tempScript -Value $menuCode -Encoding UTF8
+
+# 2. 弹出一个全新的独立 PowerShell 窗口来运行它，就像原版 MAS 一样！
+Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempScript`"" -Verb RunAs
