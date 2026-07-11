@@ -1,4 +1,5 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Authorized IT Execution Script)
+# launcher.ps1 - THE ONE SYSTEM v3.1
+# Fetches latest MAS scripts from official repo, modifies title and menu, runs in new window.
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -25,32 +26,54 @@ if ($passString -ne "8888") {
 }
 
 # ---------------------------------------------------------
-# Download a script from YOUR repo, save to temp, and execute in a NEW window
+# Download, modify title/menu, and execute in new window
 # ---------------------------------------------------------
-function Invoke-OwnScript {
+function Invoke-ModifiedScript {
     param(
-        [string]$ScriptName,
-        [string]$CustomTitle
+        [string]$ScriptName,             # 'HWID_Activation.cmd' or 'Ohook_Activation_AIO.cmd'
+        [string]$CustomTitle,            # New title for the window
+        [hashtable]$Replacements         # Additional text replacements (e.g., menu items)
     )
 
     Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
 
     $tempPath = "$env:TEMP\$ScriptName"
-    # !!! REPLACE WITH YOUR ACTUAL REPO URL !!!
-    $repoBase = "https://raw.githubusercontent.com/你的用户名/仓库名/main"
+    $baseRawUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators"
 
     try {
-        # Download the script from YOUR repository
-        $rawText = & curl.exe -sSfL --doh-url https://1.1.1.1/dns-query "$repoBase/$ScriptName" | Out-String
+        # Download the original script from official repo
+        $rawText = & curl.exe -sSfL --doh-url https://1.1.1.1/dns-query "$baseRawUrl/$ScriptName" | Out-String
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download $ScriptName from your repo. Check the file path and network."
+            throw "Failed to download $ScriptName. Check your internet connection."
         }
 
-        # Save with UTF-8 without BOM (preserves special characters like ✔)
+        # Replace the window title (first occurrence)
+        if ($ScriptName -eq "HWID_Activation.cmd") {
+            $rawText = $rawText -replace 'title\s+HWID Activation.*', "title  $CustomTitle"
+        } elseif ($ScriptName -eq "Ohook_Activation_AIO.cmd") {
+            # Change title
+            $rawText = $rawText -replace 'title\s+Ohook Activation.*', "title  $CustomTitle"
+            # Change menu texts (the Ohook menu lines)
+            $rawText = $rawText -replace 'Install Ohook Office Activation', 'Install THE ONE Office Activation'
+            $rawText = $rawText -replace 'Uninstall Ohook', 'Uninstall THE ONE'
+            # Change "Ohook activation is not installed" / "uninstalled" messages
+            $rawText = $rawText -replace 'Ohook activation is not installed\.', 'THE ONE activation is not installed.'
+            $rawText = $rawText -replace 'Successfully uninstalled Ohook activation\.', 'Successfully uninstalled THE ONE activation.'
+            $rawText = $rawText -replace 'Failed to uninstall Ohook activation\.', 'Failed to uninstall THE ONE activation.'
+            $rawText = $rawText -replace 'Uninstalling Ohook activation\.\.\.', 'Uninstalling THE ONE activation...'
+            # Change any "Installing Ohook" messages
+            $rawText = $rawText -replace 'Installing Ohook\b', 'Installing THE ONE'
+            # Change "Remove Previous Ohook Install"
+            $rawText = $rawText -replace 'Remove Previous Ohook Install', 'Remove Previous THE ONE Install'
+            # Change Smart App Control message
+            $rawText = $rawText -replace 'after Ohook activation', 'after THE ONE activation'
+        }
+
+        # Save as UTF-8 without BOM (preserves special characters)
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($tempPath, $rawText, $utf8NoBom)
 
-        # Launch the .cmd file – opens a NEW console window with your custom title
+        # Launch the .cmd file in a NEW console window
         Start-Process -FilePath $tempPath
 
         Start-Sleep -Seconds 3
@@ -90,10 +113,10 @@ while ($true) {
 
     switch ($key) {
         '1' {
-            Invoke-OwnScript -ScriptName "HWID_Activation.cmd" -CustomTitle "THE ONE WINDOWS AUTHORIZED v3.1"
+            Invoke-ModifiedScript -ScriptName "HWID_Activation.cmd" -CustomTitle "THE ONE WINDOWS AUTHORIZED v3.1"
         }
         '2' {
-            Invoke-OwnScript -ScriptName "Ohook_Activation_AIO.cmd" -CustomTitle "THE ONE OFFICE AUTHORIZED v3.1"
+            Invoke-ModifiedScript -ScriptName "Ohook_Activation_AIO.cmd" -CustomTitle "THE ONE OFFICE AUTHORIZED v3.1"
         }
         '3' {
             Write-Host "`n  [+] Cleaning temporary files..." -ForegroundColor Cyan
