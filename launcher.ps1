@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v2.4 (Ultimate Pop-up Clone)
+# launcher.ps1 - THE ONE SYSTEM v2.5 (Safe Pop-up Edition)
 # Authorized IT Execution Script
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -16,7 +16,7 @@ $menuCode = @'
 
 # 强制排版同步：锁定 98x30 的官方完美比例
 try {
-    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.4"
+    $Host.UI.RawUI.WindowTitle = "THE ONE SYSTEMS v2.5"
     $ws = $Host.UI.RawUI.WindowSize; $ws.Width = 98; $ws.Height = 30
     $bs = $Host.UI.RawUI.BufferSize; $bs.Width = 98; $bs.Height = 300
     $Host.UI.RawUI.WindowSize = $ws
@@ -38,7 +38,7 @@ while ($true) {
     [Console]::ForegroundColor = "White"
     Clear-Host
 
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.4" -ForegroundColor Cyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v2.5" -ForegroundColor Cyan
     Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "  PC Name    : $pcName" -ForegroundColor White
@@ -113,8 +113,8 @@ while ($true) {
     }
 
     switch ($key) {
-        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.4" }
-        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.4" }
+        '1' { Invoke-TheOne "/HWID" "THE ONE WINDOWS AUTHORIZED v2.5" }
+        '2' { Invoke-TheOne "/Ohook" "THE ONE OFFICE AUTHORIZED v2.5" }
         '3' {
             Write-Host "`n  [+] Optimizing PC Storage..." -ForegroundColor Cyan
             Start-Sleep -Seconds 2
@@ -132,12 +132,15 @@ while ($true) {
 }
 '@
 
-# 3. 官方原生越狱机制 (Terminal Bypass Wrapper)
+# 3. 官方原生越狱机制 (Terminal Bypass Wrapper - 包含致命死锁修复)
 $cmdWrapper = @"
 @echo off
 setlocal EnableDelayedExpansion
 
-:: 强制检测 Windows Terminal 并逃逸至 conhost (1:1 复刻官方机制)
+:: 【核心安全锁】：如果参数是 -qedit，立刻跳过检测直接执行，彻底阻断无限循环炸弹！
+if "%~1"=="-qedit" goto :skipQE
+
+:: 强制检测 Windows Terminal 
 set terminal=
 set lines=0
 for /f "skip=3 tokens=* delims=" %%A in ('mode con') do if "!lines!"=="0" (
@@ -146,10 +149,11 @@ for /f "skip=3 tokens=* delims=" %%A in ('mode con') do if "!lines!"=="0" (
 if !lines! GEQ 100 set terminal=1
 
 if defined terminal (
-    start conhost.exe "$menuCmd"
+    start conhost.exe "%~f0" -qedit
     exit /b
 )
 
+:skipQE
 :: 在完美尺寸的新窗口中启动你的 PowerShell 菜单
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$menuPs1"
 exit /b
@@ -159,5 +163,5 @@ exit /b
 Set-Content -Path $menuPs1 -Value $menuCode -Encoding UTF8
 [System.IO.File]::WriteAllText($menuCmd, $cmdWrapper, [System.Text.Encoding]::ASCII)
 
-# 5. 瞬间弹射新窗口 (当前终端立刻解脱)
+# 5. 瞬间弹射新窗口
 Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$menuCmd`""
