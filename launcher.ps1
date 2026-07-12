@@ -1,5 +1,5 @@
 # launcher.ps1 - THE ONE SYSTEM v3.1
-# Fetches latest MAS AIO from official repo, modifies title & menu, runs in new window.
+# Downloads official MAS AIO, changes title only, and starts activation directly.
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -24,60 +24,40 @@ if ($passString -ne "8888") {
     exit
 }
 
-# ---------------------------------------------------------
-# Download, modify, launch
-# ---------------------------------------------------------
-function Invoke-THEONE {
-    Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
+function Start-Activation {
+    param([string]$Mode)   # /HWID, /Ohook, etc.
 
+    Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
     $tempPath = "$env:TEMP\THE_ONE_AIO.cmd"
-    $officialUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
+    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
     try {
-        # Download the latest official AIO script
-        $rawText = Invoke-RestMethod -Uri $officialUrl -ErrorAction Stop
+        $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
+        if ($raw -notmatch 'MAS_AIO') { throw "Invalid download" }
 
-        # Validate content
-        if ($rawText -notmatch 'MAS_AIO') {
-            throw "Downloaded script does not contain expected marker. Possible network issue or script moved."
-        }
+        # Only change the window title, leave everything else intact.
+        $raw = $raw -replace '(?im)^title .*$', 'title  THE ONE SYSTEMS v3.1'
 
-        # Replace titles and menu entries (case-insensitive, first occurrence)
-        $rawText = $rawText -replace '(?im)^title .*$', 'title  THE ONE SYSTEMS v3.1'
-        $rawText = $rawText -replace 'HWID Activation', 'THE ONE Windows Authorized'
-        $rawText = $rawText -replace 'Ohook Activation', 'THE ONE Office Authorized'
-        $rawText = $rawText -replace 'KMS38 Activation', 'THE ONE Server Authorized'
-        $rawText = $rawText -replace 'Online KMS', 'THE ONE Online Activation'
+        # Ensure CRLF line endings and final empty line.
+        $raw = $raw -replace '(?<!\r)\n', "`r`n"
+        if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
 
-        # Fix any LF line ending to CRLF to avoid the script error
-        $rawText = $rawText -replace '(?<!\r)\n', "`r`n"
+        [System.IO.File]::WriteAllText($tempPath, $raw, [System.Text.Encoding]::ASCII)
 
-        # Ensure an empty line at the very end
-        if (-not $rawText.EndsWith("`r`n")) {
-            $rawText += "`r`n"
-        }
-
-        # Save as ASCII (MAS scripts are ASCII compatible, avoids encoding issues)
-        [System.IO.File]::WriteAllText($tempPath, $rawText, [System.Text.Encoding]::ASCII)
-
-        # Launch in new window
-        Start-Process -FilePath $tempPath
+        # Launch with the activation mode to skip the menu.
+        Start-Process -FilePath $tempPath -ArgumentList $Mode
 
         Start-Sleep -Seconds 3
         Remove-Item -Path $tempPath -Force -ErrorAction SilentlyContinue
     }
     catch {
-        Write-Host "  [-] Execution failed!" -ForegroundColor Red
-        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
         Start-Sleep -Seconds 5
     }
 }
 
-# ---------------------------------------------------------
-# Deep Clean
-# ---------------------------------------------------------
 function Invoke-DeepClean {
-    Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
+    Write-Host "`n  [+] Deep cleaning..." -ForegroundColor Cyan
     $folders = @(
         $env:TEMP,
         "$env:SystemRoot\Temp",
@@ -88,19 +68,14 @@ function Invoke-DeepClean {
     )
     foreach ($folder in $folders) {
         if (Test-Path $folder) {
-            Write-Host "  Cleaning: $folder" -ForegroundColor DarkGray
             Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue |
                 Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
         }
     }
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
-    Write-Host "`n  (Note: Files locked by running programs cannot be deleted.)" -ForegroundColor DarkGray
+    Write-Host "  [+] PC Optimized." -ForegroundColor Green
 }
 
-# ---------------------------------------------------------
-# Main Menu Loop
-# ---------------------------------------------------------
 while ($true) {
     Clear-Host
     Write-Host "`n  T H E   O N E   S Y S T E M S   v3.1" -ForegroundColor Cyan
@@ -110,10 +85,10 @@ while ($true) {
     Write-Host "  MAC Address: $macAddress" -ForegroundColor White
     Write-Host "  Local IP   : $localIp" -ForegroundColor White
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  [ 1 ] Activate THE ONE Windows Authorized" -ForegroundColor Green
-    Write-Host "  [ 2 ] Activate THE ONE Office Authorized" -ForegroundColor Green
+    Write-Host "  [ 1 ] Activate THE ONE Windows" -ForegroundColor Green
+    Write-Host "  [ 2 ] Activate THE ONE Office" -ForegroundColor Green
     Write-Host "  [ 3 ] THE ONE PC Optimization" -ForegroundColor Green
-    Write-Host "  [ 4 ] Direct Bypass" -ForegroundColor Green
+    Write-Host "  [ 4 ] Full MAS Menu (Original)" -ForegroundColor Green
     Write-Host "  [ 0 ] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "`n  > Select module: " -NoNewline
@@ -124,19 +99,15 @@ while ($true) {
     if ($key -eq '0') { exit }
 
     switch ($key) {
-        '1' {
-            Invoke-THEONE
-        }
-        '2' {
-            Invoke-THEONE
-        }
+        '1' { Start-Activation "/HWID" }
+        '2' { Start-Activation "/Ohook" }
         '3' {
             Invoke-DeepClean
-            Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
+            Write-Host "`n  Press any key to return..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
         }
         '4' {
-            Write-Host "`n  [+] Bypassing..." -ForegroundColor Cyan
+            Write-Host "`n  [+] Launching original MAS menu..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
         }
     }
