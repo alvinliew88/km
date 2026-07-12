@@ -1,4 +1,8 @@
-# launcher.ps1 - THE ONE SYSTEM (Professional IT Console UI)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, No Borders, Auto-Clean History)
+
+# Clear command history (prevents arrow-up from showing this link)
+try { [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory() } catch {}
+try { Clear-History } catch {}
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -12,7 +16,7 @@ try {
     $macAddress = "UNKNOWN"
 }
 
-# Brand (Manufacturer)
+# Brand
 $brand = "Unknown"
 try {
     $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
@@ -41,7 +45,7 @@ $processor = "Unknown"
 try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
     $processor = $cpu.Name -replace '\s+', ' '
-    if ($processor.Length -gt 40) { $processor = $processor.Substring(0, 40) + "..." }
+    if ($processor.Length -gt 45) { $processor = $processor.Substring(0, 45) + "..." }
 } catch {}
 
 # RAM
@@ -77,8 +81,9 @@ function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
 
-    $tempAIO = "$env:TEMP\THE_ONE_AIO.cmd"
-    $tempRun = "$env:TEMP\THE_ONE_RUN.cmd"
+    $tempAIO   = "$env:TEMP\THE_ONE_AIO.cmd"
+    $tempRun   = "$env:TEMP\THE_ONE_RUN.cmd"
+    $flagFile  = "$env:TEMP\THE_ONE_EXIT.flag"
     $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
     try {
@@ -94,27 +99,55 @@ function Start-Activation {
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
+        # Delete old flag file before starting
+        Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
+
+        # Wrapper script with 7‑second auto‑close logic
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
 echo.
-echo   =============================================================
-echo              T H E   O N E   S Y S T E M S   v$ver
-echo   =============================================================
+echo   --------------------------------------------------------
+echo          T H E   O N E   S Y S T E M S   v$ver
+echo   --------------------------------------------------------
 echo.
 call "$tempAIO" $Mode
 echo.
-echo   =============================================================
-echo     Process finished. Press any key to close this window
-echo     and return to THE ONE main menu.
-echo   =============================================================
-pause >nul
+echo   --------------------------------------------------------
+echo    Press any key within 7 seconds to return to main menu.
+echo    Otherwise ALL TERMINALS WILL BE CLOSED.
+echo   --------------------------------------------------------
+echo.
+
+choice /c 0 /t 7 /d 0 /n >nul
+if errorlevel 2 goto :stay
+echo exit > "$flagFile"
+:stay
+exit
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`""
 
-        Write-Host "  [+] Activation window launched. The main menu remains active." -ForegroundColor Cyan
+        # Wait for the activation window to close
+        Start-Sleep -Seconds 2
+
+        # Monitor flag file for up to 10 seconds
+        $waited = 0
+        while ($waited -lt 10) {
+            if (Test-Path $flagFile) {
+                # Timeout occurred → exit everything
+                Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
+                Write-Host "`n  [!] No key pressed. Exiting all terminals..." -ForegroundColor Red
+                Start-Sleep -Seconds 2
+                exit
+            }
+            Start-Sleep -Seconds 1
+            $waited++
+        }
+
+        # If we reach here, the user pressed a key → back to menu
+        Write-Host "  [+] Returning to main menu..." -ForegroundColor Cyan
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
@@ -166,69 +199,35 @@ function Get-MASVersion {
     return "?.?"
 }
 
+# ------------------------------------------------------------
+#  MODERN CLEAN UI (No boxes, only subtle separators)
+# ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
     Clear-Host
 
-    Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "            T H E   O N E   S Y S T E M S   v$masver            " -NoNewline -ForegroundColor Cyan
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "               Authorized Operations Terminal                   " -NoNewline -ForegroundColor DarkGray
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v$masver" -ForegroundColor Cyan
+    Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
+    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
 
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  PC Name      : $($pcName.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  User Account : $($userName.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  Brand        : $($brand.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  MAC Address  : $($macAddress.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  Local IP     : $($localIp.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  Windows      : $($windowsVersion.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  Install Date : $($installDate.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  Processor    : $($processor.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  RAM          : $($ram.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  Storage (C:) : $($storage.PadRight(38))" -NoNewline -ForegroundColor White
-    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  PC Name      : $pcName" -ForegroundColor White
+    Write-Host "  User Account : $userName" -ForegroundColor White
+    Write-Host "  Brand        : $brand" -ForegroundColor White
+    Write-Host "  MAC Address  : $macAddress" -ForegroundColor White
+    Write-Host "  Local IP     : $localIp" -ForegroundColor White
+    Write-Host "  Windows      : $windowsVersion" -ForegroundColor White
+    Write-Host "  Install Date : $installDate" -ForegroundColor White
+    Write-Host "  Processor    : $processor" -ForegroundColor White
+    Write-Host "  RAM          : $ram" -ForegroundColor White
+    Write-Host "  Storage (C:) : $storage" -ForegroundColor White
 
-    Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows                  " -NoNewline -ForegroundColor Green
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  [2] Reactivate THE ONE PC Office                              " -NoNewline -ForegroundColor Green
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  [3] THE ONE PC Optimization                                   " -NoNewline -ForegroundColor Green
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  [4] Full THE ONE Activation Suite (All Options)               " -NoNewline -ForegroundColor Green
-    Write-Host "║" -ForegroundColor DarkCyan
-
-    Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
-    Write-Host "  [0] Exit Terminal                                             " -NoNewline -ForegroundColor DarkGray
-    Write-Host "║" -ForegroundColor DarkCyan
-    Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
+    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
+    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows" -ForegroundColor Green
+    Write-Host "  [2] Reactivate THE ONE PC Office" -ForegroundColor Green
+    Write-Host "  [3] THE ONE PC Optimization" -ForegroundColor Green
+    Write-Host "  [4] Full THE ONE Activation Suite (All Options)" -ForegroundColor Green
+    Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
+    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
 
     Write-Host "`n  > Select module: " -NoNewline
     $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
