@@ -1,5 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1
-# Downloads official MAS AIO, changes title only, and starts activation directly.
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Keeps activation window open)
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -27,28 +26,48 @@ if ($passString -ne "8888") {
 function Start-Activation {
     param([string]$Mode)   # /HWID, /Ohook, etc.
 
-    Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
-    $tempPath = "$env:TEMP\THE_ONE_AIO.cmd"
+    Write-Host "`n  [+] Access Granted! Preparing activation..." -ForegroundColor Green
+
+    $tempAIO = "$env:TEMP\THE_ONE_AIO.cmd"
+    $tempRun = "$env:TEMP\THE_ONE_RUN.cmd"
     $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
     try {
+        # Download the official AIO script
         $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
-        if ($raw -notmatch 'MAS_AIO') { throw "Invalid download" }
+        if ($raw -notmatch 'MAS_AIO') { throw "Invalid download (marker missing)" }
 
-        # Only change the window title, leave everything else intact.
+        # Only change the window title, nothing else.
         $raw = $raw -replace '(?im)^title .*$', 'title  THE ONE SYSTEMS v3.1'
 
-        # Ensure CRLF line endings and final empty line.
+        # Fix line endings and ensure final empty line (avoids LF error)
         $raw = $raw -replace '(?<!\r)\n', "`r`n"
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
 
-        [System.IO.File]::WriteAllText($tempPath, $raw, [System.Text.Encoding]::ASCII)
+        # Save the modified AIO script as ASCII (compatible with all its content)
+        [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Launch with the activation mode to skip the menu.
-        Start-Process -FilePath $tempPath -ArgumentList $Mode
+        # Create a wrapper script that calls the AIO with the desired mode AND pauses
+        $wrapper = @"
+@echo off
+call "$tempAIO" $Mode
+echo.
+echo ==========================================
+echo   Press any key to return to THE ONE menu
+echo ==========================================
+pause >nul
+"@
+        [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
-        Start-Sleep -Seconds 3
-        Remove-Item -Path $tempPath -Force -ErrorAction SilentlyContinue
+        # Launch the wrapper in a new cmd window (keeps open after activation)
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`""
+
+        Write-Host "  [+] Activation window opened. Check the new window for progress." -ForegroundColor Cyan
+
+        # Wait a moment for the process to start, then clean up the script files
+        # (the AIO script may still be running, but we can remove the temp files after a delay)
+        Start-Sleep -Seconds 5
+        Remove-Item -Path $tempAIO, $tempRun -Force -ErrorAction SilentlyContinue
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
@@ -57,7 +76,7 @@ function Start-Activation {
 }
 
 function Invoke-DeepClean {
-    Write-Host "`n  [+] Deep cleaning..." -ForegroundColor Cyan
+    Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
     $folders = @(
         $env:TEMP,
         "$env:SystemRoot\Temp",
@@ -68,14 +87,16 @@ function Invoke-DeepClean {
     )
     foreach ($folder in $folders) {
         if (Test-Path $folder) {
+            Write-Host "  Cleaning: $folder" -ForegroundColor DarkGray
             Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue |
                 Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
         }
     }
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "  [+] PC Optimized." -ForegroundColor Green
+    Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
 }
 
+# Main Menu Loop
 while ($true) {
     Clear-Host
     Write-Host "`n  T H E   O N E   S Y S T E M S   v3.1" -ForegroundColor Cyan
@@ -103,11 +124,11 @@ while ($true) {
         '2' { Start-Activation "/Ohook" }
         '3' {
             Invoke-DeepClean
-            Write-Host "`n  Press any key to return..." -ForegroundColor DarkGray
+            Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
         }
         '4' {
-            Write-Host "`n  [+] Launching original MAS menu..." -ForegroundColor Cyan
+            Write-Host "`n  [+] Launching full MAS menu..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
         }
     }
