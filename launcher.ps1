@@ -141,7 +141,7 @@ function Invoke-DeepClean {
     }
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
     Write-Host "`n  [+] PC Optimized successfully. Press any key to return to main menu." -ForegroundColor Green
-    Write-Host "  [0] Press 0 to close all terminals immediately. Will auto-exit in 7 seconds." -ForegroundColor DarkGray
+    Write-Host "  Will auto-exit in 7 seconds if no key is pressed." -ForegroundColor DarkGray
 
     $timeout = 7
     $keyPressed = $false
@@ -155,11 +155,7 @@ function Invoke-DeepClean {
         }
     }
 
-    if ($keyPressed) {
-        return
-    } else {
-        exit
-    }
+    if ($keyPressed) { return } else { exit }
 }
 
 function Get-MASVersion {
@@ -170,9 +166,6 @@ function Get-MASVersion {
     return "?.?"
 }
 
-# ------------------------------------------------------------
-#  PROFESSIONAL UI MAIN MENU
-# ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
     Clear-Host
