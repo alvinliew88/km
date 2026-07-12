@@ -1,8 +1,9 @@
-# launcher.ps1 - THE ONE SYSTEM (Auto‑updating, Self‑closing windows)
+# launcher.ps1 - THE ONE SYSTEM (Professional IT Console UI)
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $pcName = $env:COMPUTERNAME
+$userName = $env:USERNAME
 $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
     Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 try {
@@ -10,6 +11,52 @@ try {
 } catch {
     $macAddress = "UNKNOWN"
 }
+
+# Windows Version (friendly name, e.g., "Windows 11 Pro 23H2")
+$windowsVersion = "Unknown"
+try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    $caption = $os.Caption -replace 'Microsoft ', ''
+    # Get DisplayVersion if available (e.g., 23H2)
+    $displayVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DisplayVersion
+    if ($displayVersion) { $caption += " $displayVersion" }
+    $windowsVersion = $caption
+} catch {}
+
+# Install Date
+$installDate = "Unknown"
+try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    if ($os.InstallDate) {
+        $installDate = $os.InstallDate.ToString("yyyy-MM-dd")
+    }
+} catch {}
+
+# Processor
+$processor = "Unknown"
+try {
+    $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+    $processor = $cpu.Name -replace '\s+', ' '
+    # Trim to reasonable length (max ~40 chars)
+    if ($processor.Length -gt 40) { $processor = $processor.Substring(0, 40) + "..." }
+} catch {}
+
+# Installed RAM (GB)
+$ram = "Unknown"
+try {
+    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+    $totalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
+    $ram = "$totalGB GB"
+} catch {}
+
+# Storage (C: drive total / free)
+$storage = "Unknown"
+try {
+    $cDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop
+    $totalGB = [math]::Round($cDrive.Size / 1GB, 1)
+    $freeGB = [math]::Round($cDrive.FreeSpace / 1GB, 1)
+    $storage = "$totalGB GB total / $freeGB GB free"
+} catch {}
 
 $password = Read-Host "key" -AsSecureString
 $passString = if ($password) {
@@ -23,36 +70,27 @@ if ($passString -ne "8888") {
     exit
 }
 
-# ============================================================
-#  Download official MAS AIO, change title, launch with mode
-# ============================================================
 function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
 
     $tempAIO = "$env:TEMP\THE_ONE_AIO.cmd"
     $tempRun = "$env:TEMP\THE_ONE_RUN.cmd"
-    # !! If the official URL ever changes, update the line below !!
     $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
     try {
         $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
         if ($raw -notmatch 'MAS_AIO') { throw "Downloaded script is invalid (missing marker)." }
 
-        # Extract official version
         $ver = '?.?'
         if ($raw -match 'set\s+masver=([\d.]+)') { $ver = $Matches[1] }
 
-        # Only change the title line
         $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
-
-        # Ensure CRLF and final empty line
         $raw = $raw -replace '(?<!\r)\n', "`r`n"
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Wrapper script: runs activation, then auto‑closes after 7 seconds
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -91,9 +129,6 @@ exit
     }
 }
 
-# ============================================================
-#  PC Optimization – then close all terminals after 7 seconds
-# ============================================================
 function Invoke-DeepClean {
     Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
     $folders = @(
@@ -115,7 +150,6 @@ function Invoke-DeepClean {
     Write-Host "`n  [+] PC Optimized successfully. All terminals will close in 7 seconds..." -ForegroundColor Green
     Write-Host "  [0] Press 0 to close immediately" -ForegroundColor DarkGray
 
-    # Wait up to 7 seconds, allow immediate exit with '0'
     $timeout = 7
     while ($timeout -gt 0) {
         if ([Console]::KeyAvailable) {
@@ -125,13 +159,9 @@ function Invoke-DeepClean {
         Start-Sleep -Seconds 1
         $timeout--
     }
-    # After countdown (or keypress), close the PowerShell window entirely
     exit
 }
 
-# ============================================================
-#  Get dynamic version from official script
-# ============================================================
 function Get-MASVersion {
     try {
         $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd" -ErrorAction Stop
@@ -140,27 +170,73 @@ function Get-MASVersion {
     return "?.?"
 }
 
-# ============================================================
-#  Modern Main Menu Loop
-# ============================================================
+# ------------------------------------------------------------
+#  PROFESSIONAL UI MAIN MENU (Enhanced System Info)
+# ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
     Clear-Host
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v$masver" -ForegroundColor Cyan
-    Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
-    Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  PC Name      : $pcName" -ForegroundColor White
-    Write-Host "  MAC Address  : $macAddress" -ForegroundColor White
-    Write-Host "  Local IP     : $localIp" -ForegroundColor White
-    Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows" -ForegroundColor Green
-    Write-Host "  [2] Reactivate THE ONE PC Office" -ForegroundColor Green
-    Write-Host "  [3] THE ONE PC Optimization" -ForegroundColor Green
-    Write-Host "  [4] Full MAS Menu (Original)" -ForegroundColor Green
-    Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
-    Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
-    Write-Host "`n  > Select module: " -NoNewline
 
+    Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "            T H E   O N E   S Y S T E M S   v$masver            " -NoNewline -ForegroundColor Cyan
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "               Authorized Operations Terminal                   " -NoNewline -ForegroundColor DarkGray
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
+
+    # System Info block
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  PC Name      : $($pcName.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  User Account : $($userName.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  MAC Address  : $($macAddress.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  Local IP     : $($localIp.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  Windows      : $($windowsVersion.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  Install Date : $($installDate.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  Processor    : $($processor.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  RAM          : $($ram.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  Storage (C:) : $($storage.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+
+    Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
+    # Menu Options
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows                  " -NoNewline -ForegroundColor Green
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  [2] Reactivate THE ONE PC Office                              " -NoNewline -ForegroundColor Green
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  [3] THE ONE PC Optimization                                   " -NoNewline -ForegroundColor Green
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  [4] Full THE ONE Activation Suite (All Options)               " -NoNewline -ForegroundColor Green
+    Write-Host "║" -ForegroundColor DarkCyan
+
+    Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  [0] Exit Terminal                                             " -NoNewline -ForegroundColor DarkGray
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
+
+    Write-Host "`n  > Select module: " -NoNewline
     $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
     Write-Host "$key" -ForegroundColor White
 
@@ -171,7 +247,7 @@ while ($true) {
         '2' { Start-Activation "/Ohook" "Office Activation" }
         '3' { Invoke-DeepClean }
         '4' {
-            Write-Host "`n  [+] Launching original MAS full menu..." -ForegroundColor Cyan
+            Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
         }
     }
