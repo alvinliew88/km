@@ -12,6 +12,13 @@ try {
     $macAddress = "UNKNOWN"
 }
 
+# Brand (Manufacturer)
+$brand = "Unknown"
+try {
+    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+    if ($cs.Manufacturer) { $brand = $cs.Manufacturer }
+} catch {}
+
 # Windows Version
 $windowsVersion = "Unknown"
 try {
@@ -87,7 +94,6 @@ function Start-Activation {
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Wrapper: shows result, waits for keypress, then closes
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -142,7 +148,6 @@ function Invoke-DeepClean {
     while ($timeout -gt 0 -and -not $keyPressed) {
         if ([Console]::KeyAvailable) {
             $keyInfo = [Console]::ReadKey($true)
-            # Any key returns to menu (including 0, but we treat 0 specially below)
             $keyPressed = $true
         } else {
             Start-Sleep -Seconds 1
@@ -151,10 +156,8 @@ function Invoke-DeepClean {
     }
 
     if ($keyPressed) {
-        # Any key pressed -> return to main menu (continue in the loop)
         return
     } else {
-        # Timeout -> close all terminals (exit the entire script)
         exit
     }
 }
@@ -188,6 +191,9 @@ while ($true) {
     Write-Host "║" -ForegroundColor DarkCyan
     Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
     Write-Host "  User Account : $($userName.PadRight(38))" -NoNewline -ForegroundColor White
+    Write-Host "║" -ForegroundColor DarkCyan
+    Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
+    Write-Host "  Brand        : $($brand.PadRight(38))" -NoNewline -ForegroundColor White
     Write-Host "║" -ForegroundColor DarkCyan
     Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
     Write-Host "  MAC Address  : $($macAddress.PadRight(38))" -NoNewline -ForegroundColor White
