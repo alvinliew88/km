@@ -1,6 +1,6 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Silent fallback for older systems)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Fully silent, no red errors)
 
-# ---------- PRIVACY : Clear terminal history only ----------
+# ---------- PRIVACY : Clear terminal history ----------
 try {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     Clear-History
@@ -18,11 +18,11 @@ try {
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
 
-# Local IP – completely silent fallback
+# Local IP – silently fallback to ipconfig if Get-NetIPAddress fails
 $localIp = "Unknown"
 try {
-    $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
-        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1 -ErrorAction Stop).IPAddress
+    $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -ErrorAction Stop |
+        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 } catch {
     try {
         $lines = & ipconfig.exe | Select-String "IPv4 Address"
@@ -30,10 +30,10 @@ try {
     } catch {}
 }
 
-# MAC Address – completely silent fallback
+# MAC Address – silently fallback to getmac if Get-NetAdapter fails
 $macAddress = "UNKNOWN"
 try {
-    $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1 -ErrorAction Stop).MacAddress
+    $macAddress = (Get-NetAdapter -ErrorAction Stop | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
 } catch {
     try {
         $macOutput = & getmac.exe /fo csv
