@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, Clean Exit, History Clear)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, Clean Exit, History Clear, Progress)
 
 # Clear history immediately (no arrow-up leak)
 try { [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory() } catch {}
@@ -152,6 +152,7 @@ exit
 
 function Invoke-DeepClean {
     Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
+
     $folders = @(
         $env:TEMP,
         "$env:SystemRoot\Temp",
@@ -160,13 +161,30 @@ function Invoke-DeepClean {
         "$env:LOCALAPPDATA\Microsoft\Windows\INetCache",
         "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files"
     )
+
+    $spinner = @('|', '/', '-', '\')
+    $spinnerIndex = 0
+
     foreach ($folder in $folders) {
         if (Test-Path $folder) {
-            Write-Host "  Cleaning: $folder" -ForegroundColor DarkGray
-            Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue |
-                Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+            Write-Host "`n  Cleaning: $folder" -ForegroundColor DarkGray
+            Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+                $spinnerIndex = ($spinnerIndex + 1) % 4
+                $spin = $spinner[$spinnerIndex]
+                Write-Host "`r  $spin Processing: $($_.FullName)" -NoNewline
+                try {
+                    Remove-Item $_.FullName -Force -Recurse -ErrorAction Stop
+                } catch {
+                    # Some files may be locked; we skip them silently
+                }
+            }
+            # Clear the progress line
+            Write-Host "`r" -NoNewline
+            Write-Host (" " * 60) -NoNewline   # erase the line
+            Write-Host "`r" -NoNewline
         }
     }
+
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
     Write-Host "`n  [+] PC Optimized successfully. Press any key to return to main menu." -ForegroundColor Green
     Write-Host "  Will auto-exit in 7 seconds if no key is pressed." -ForegroundColor DarkGray
