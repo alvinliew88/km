@@ -12,12 +12,11 @@ try {
     $macAddress = "UNKNOWN"
 }
 
-# Windows Version (friendly name, e.g., "Windows 11 Pro 23H2")
+# Windows Version
 $windowsVersion = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
     $caption = $os.Caption -replace 'Microsoft ', ''
-    # Get DisplayVersion if available (e.g., 23H2)
     $displayVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DisplayVersion
     if ($displayVersion) { $caption += " $displayVersion" }
     $windowsVersion = $caption
@@ -27,9 +26,7 @@ try {
 $installDate = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-    if ($os.InstallDate) {
-        $installDate = $os.InstallDate.ToString("yyyy-MM-dd")
-    }
+    if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") }
 } catch {}
 
 # Processor
@@ -37,11 +34,10 @@ $processor = "Unknown"
 try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
     $processor = $cpu.Name -replace '\s+', ' '
-    # Trim to reasonable length (max ~40 chars)
     if ($processor.Length -gt 40) { $processor = $processor.Substring(0, 40) + "..." }
 } catch {}
 
-# Installed RAM (GB)
+# RAM
 $ram = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -49,12 +45,12 @@ try {
     $ram = "$totalGB GB"
 } catch {}
 
-# Storage (C: drive total / free)
+# Storage (C:)
 $storage = "Unknown"
 try {
     $cDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop
     $totalGB = [math]::Round($cDrive.Size / 1GB, 1)
-    $freeGB = [math]::Round($cDrive.FreeSpace / 1GB, 1)
+    $freeGB  = [math]::Round($cDrive.FreeSpace / 1GB, 1)
     $storage = "$totalGB GB total / $freeGB GB free"
 } catch {}
 
@@ -91,6 +87,7 @@ function Start-Activation {
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
+        # Wrapper: shows result, waits for keypress, then closes
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -102,26 +99,16 @@ echo.
 call "$tempAIO" $Mode
 echo.
 echo   =============================================================
-echo     Process finished. This window will close in 7 seconds.
-echo     Press 0 to close immediately.
+echo     Process finished. Press any key to close this window
+echo     and return to THE ONE main menu.
 echo   =============================================================
-echo.
-
-set /a timer=7
-:countdown
-choice /c 0 /t 1 /d 0 /n >nul
-if errorlevel 2 goto exit_now
-set /a timer-=1
-if %timer% gtr 0 goto countdown
-
-:exit_now
-exit
+pause >nul
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
         Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`""
 
-        Write-Host "  [+] Activation window launched. It will close automatically." -ForegroundColor Cyan
+        Write-Host "  [+] Activation window launched. The main menu remains active." -ForegroundColor Cyan
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
@@ -147,19 +134,29 @@ function Invoke-DeepClean {
         }
     }
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "`n  [+] PC Optimized successfully. All terminals will close in 7 seconds..." -ForegroundColor Green
-    Write-Host "  [0] Press 0 to close immediately" -ForegroundColor DarkGray
+    Write-Host "`n  [+] PC Optimized successfully. Press any key to return to main menu." -ForegroundColor Green
+    Write-Host "  [0] Press 0 to close all terminals immediately. Will auto-exit in 7 seconds." -ForegroundColor DarkGray
 
     $timeout = 7
-    while ($timeout -gt 0) {
+    $keyPressed = $false
+    while ($timeout -gt 0 -and -not $keyPressed) {
         if ([Console]::KeyAvailable) {
             $keyInfo = [Console]::ReadKey($true)
-            if ($keyInfo.KeyChar -eq '0') { break }
+            # Any key returns to menu (including 0, but we treat 0 specially below)
+            $keyPressed = $true
+        } else {
+            Start-Sleep -Seconds 1
+            $timeout--
         }
-        Start-Sleep -Seconds 1
-        $timeout--
     }
-    exit
+
+    if ($keyPressed) {
+        # Any key pressed -> return to main menu (continue in the loop)
+        return
+    } else {
+        # Timeout -> close all terminals (exit the entire script)
+        exit
+    }
 }
 
 function Get-MASVersion {
@@ -171,7 +168,7 @@ function Get-MASVersion {
 }
 
 # ------------------------------------------------------------
-#  PROFESSIONAL UI MAIN MENU (Enhanced System Info)
+#  PROFESSIONAL UI MAIN MENU
 # ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
@@ -186,7 +183,6 @@ while ($true) {
     Write-Host "║" -ForegroundColor DarkCyan
     Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
 
-    # System Info block
     Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
     Write-Host "  PC Name      : $($pcName.PadRight(38))" -NoNewline -ForegroundColor White
     Write-Host "║" -ForegroundColor DarkCyan
@@ -216,7 +212,6 @@ while ($true) {
     Write-Host "║" -ForegroundColor DarkCyan
 
     Write-Host "  ╠══════════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    # Menu Options
     Write-Host "  ║" -NoNewline -ForegroundColor DarkCyan
     Write-Host "  [1] Reactivate THE ONE PC Authorized Windows                  " -NoNewline -ForegroundColor Green
     Write-Host "║" -ForegroundColor DarkCyan
