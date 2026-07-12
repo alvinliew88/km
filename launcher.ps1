@@ -1,6 +1,6 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, No Borders, Auto-Clean History)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, Clean Exit, History Clear)
 
-# Clear command history (prevents arrow-up from showing this link)
+# Clear history immediately (no arrow-up leak)
 try { [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory() } catch {}
 try { Clear-History } catch {}
 
@@ -99,10 +99,10 @@ function Start-Activation {
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Delete old flag file before starting
+        # Remove old flag
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-        # Wrapper script with 7‑second auto‑close logic
+        # Wrapper: wait for keypress, else create flag file to signal main script to exit
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -121,33 +121,28 @@ echo.
 
 choice /c 0 /t 7 /d 0 /n >nul
 if errorlevel 2 goto :stay
-echo exit > "$flagFile"
+echo timeout > "$flagFile"
 :stay
 exit
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`""
+        # Launch the activation window and keep its process object
+        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
 
-        # Wait for the activation window to close
-        Start-Sleep -Seconds 2
+        # Wait until the activation window closes (no infinite wait)
+        $proc.WaitForExit()
 
-        # Monitor flag file for up to 10 seconds
-        $waited = 0
-        while ($waited -lt 10) {
-            if (Test-Path $flagFile) {
-                # Timeout occurred → exit everything
-                Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
-                Write-Host "`n  [!] No key pressed. Exiting all terminals..." -ForegroundColor Red
-                Start-Sleep -Seconds 2
-                exit
-            }
+        # Now check if the flag file was created (meaning timeout occurred)
+        if (Test-Path $flagFile) {
+            Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
+            Write-Host "`n  [!] No key was pressed. Exiting all terminals..." -ForegroundColor Red
             Start-Sleep -Seconds 1
-            $waited++
+            # This will close the main PowerShell window
+            exit
+        } else {
+            Write-Host "`n  [+] User pressed a key. Returning to main menu." -ForegroundColor Cyan
         }
-
-        # If we reach here, the user pressed a key → back to menu
-        Write-Host "  [+] Returning to main menu..." -ForegroundColor Cyan
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
