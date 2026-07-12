@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM (Dynamic Version, Modern UI, Keeps Activation Window)
+# launcher.ps1 - THE ONE SYSTEM (Auto‑updating, Self‑closing windows)
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -23,56 +23,67 @@ if ($passString -ne "8888") {
     exit
 }
 
-# ------------------------------------------------------------
-# Download official MAS AIO, modify title, launch with mode
-# ------------------------------------------------------------
+# ============================================================
+#  Download official MAS AIO, change title, launch with mode
+# ============================================================
 function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
 
     $tempAIO = "$env:TEMP\THE_ONE_AIO.cmd"
     $tempRun = "$env:TEMP\THE_ONE_RUN.cmd"
-    $url     = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
+    # !! If the official URL ever changes, update the line below !!
+    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
     try {
         $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
         if ($raw -notmatch 'MAS_AIO') { throw "Downloaded script is invalid (missing marker)." }
 
-        # Extract official version (set masver=...)
+        # Extract official version
         $ver = '?.?'
         if ($raw -match 'set\s+masver=([\d.]+)') { $ver = $Matches[1] }
 
-        # Change only the title line, include dynamic version
+        # Only change the title line
         $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
 
-        # Fix line endings and final empty line
+        # Ensure CRLF and final empty line
         $raw = $raw -replace '(?<!\r)\n', "`r`n"
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Wrapper script that runs the AIO with the selected mode and keeps the window open
+        # Wrapper script: runs activation, then auto‑closes after 7 seconds
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
 echo.
-echo  ╔══════════════════════════════════════════════════════════════╗
-echo  ║            T H E   O N E   S Y S T E M S   v$ver            ║
-echo  ╚══════════════════════════════════════════════════════════════╝
+echo   =============================================================
+echo              T H E   O N E   S Y S T E M S   v$ver
+echo   =============================================================
 echo.
 call "$tempAIO" $Mode
 echo.
-echo  ╔══════════════════════════════════════════════════════════════╗
-echo  ║  Process finished. You may close this window.               ║
-echo  ╚══════════════════════════════════════════════════════════════╝
+echo   =============================================================
+echo     Process finished. This window will close in 7 seconds.
+echo     Press 0 to close immediately.
+echo   =============================================================
+echo.
+
+set /a timer=7
+:countdown
+choice /c 0 /t 1 /d 0 /n >nul
+if errorlevel 2 goto exit_now
+set /a timer-=1
+if %timer% gtr 0 goto countdown
+
+:exit_now
+exit
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
-        # Launch in a new cmd window that stays open (/k)
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/k `"$tempRun`""
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`""
 
-        Start-Sleep -Seconds 2
-        Write-Host "  [+] Activation window launched. Check the new window for progress." -ForegroundColor Cyan
+        Write-Host "  [+] Activation window launched. It will close automatically." -ForegroundColor Cyan
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
@@ -80,9 +91,9 @@ echo  ╚═══════════════════════�
     }
 }
 
-# ------------------------------------------------------------
-# PC Optimization
-# ------------------------------------------------------------
+# ============================================================
+#  PC Optimization – then close all terminals after 7 seconds
+# ============================================================
 function Invoke-DeepClean {
     Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
     $folders = @(
@@ -101,12 +112,26 @@ function Invoke-DeepClean {
         }
     }
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
+    Write-Host "`n  [+] PC Optimized successfully. All terminals will close in 7 seconds..." -ForegroundColor Green
+    Write-Host "  [0] Press 0 to close immediately" -ForegroundColor DarkGray
+
+    # Wait up to 7 seconds, allow immediate exit with '0'
+    $timeout = 7
+    while ($timeout -gt 0) {
+        if ([Console]::KeyAvailable) {
+            $keyInfo = [Console]::ReadKey($true)
+            if ($keyInfo.KeyChar -eq '0') { break }
+        }
+        Start-Sleep -Seconds 1
+        $timeout--
+    }
+    # After countdown (or keypress), close the PowerShell window entirely
+    exit
 }
 
-# ------------------------------------------------------------
-# Get dynamic version for main menu display
-# ------------------------------------------------------------
+# ============================================================
+#  Get dynamic version from official script
+# ============================================================
 function Get-MASVersion {
     try {
         $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd" -ErrorAction Stop
@@ -115,26 +140,25 @@ function Get-MASVersion {
     return "?.?"
 }
 
-# ------------------------------------------------------------
-# Modern Main Menu Loop
-# ------------------------------------------------------------
+# ============================================================
+#  Modern Main Menu Loop
+# ============================================================
 while ($true) {
     $masver = Get-MASVersion
     Clear-Host
-    Write-Host "`n  ╔══════════════════════════════════════════════════════════════╗" -ForegroundColor DarkCyan
-    Write-Host "  ║          T H E   O N E   S Y S T E M S   v$masver              ║" -ForegroundColor Cyan
-    Write-Host "  ║          Authorized Operations Terminal                        ║" -ForegroundColor DarkGray
-    Write-Host "  ╠══════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    Write-Host "  ║  PC Name     : $($pcName.PadRight(30))  ║" -ForegroundColor White
-    Write-Host "  ║  MAC Address : $($macAddress.PadRight(30))  ║" -ForegroundColor White
-    Write-Host "  ║  Local IP    : $($localIp.PadRight(30))  ║" -ForegroundColor White
-    Write-Host "  ╠══════════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    Write-Host "  ║  [1] Reactivate THE ONE PC Authorized Windows               ║" -ForegroundColor Green
-    Write-Host "  ║  [2] Reactivate THE ONE PC Office                           ║" -ForegroundColor Green
-    Write-Host "  ║  [3] THE ONE PC Optimization                                ║" -ForegroundColor Green
-    Write-Host "  ║  [4] Full MAS Menu (Original)                               ║" -ForegroundColor Green
-    Write-Host "  ║  [0] Exit Terminal                                          ║" -ForegroundColor DarkGray
-    Write-Host "  ╚══════════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v$masver" -ForegroundColor Cyan
+    Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
+    Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  PC Name      : $pcName" -ForegroundColor White
+    Write-Host "  MAC Address  : $macAddress" -ForegroundColor White
+    Write-Host "  Local IP     : $localIp" -ForegroundColor White
+    Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows" -ForegroundColor Green
+    Write-Host "  [2] Reactivate THE ONE PC Office" -ForegroundColor Green
+    Write-Host "  [3] THE ONE PC Optimization" -ForegroundColor Green
+    Write-Host "  [4] Full MAS Menu (Original)" -ForegroundColor Green
+    Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
+    Write-Host "  --------------------------------------------------" -ForegroundColor DarkGray
     Write-Host "`n  > Select module: " -NoNewline
 
     $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
@@ -145,11 +169,7 @@ while ($true) {
     switch ($key) {
         '1' { Start-Activation "/HWID" "Windows Activation" }
         '2' { Start-Activation "/Ohook" "Office Activation" }
-        '3' {
-            Invoke-DeepClean
-            Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
-            $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
-        }
+        '3' { Invoke-DeepClean }
         '4' {
             Write-Host "`n  [+] Launching original MAS full menu..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
