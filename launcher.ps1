@@ -1,6 +1,6 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Fully silent, no red errors)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (No red errors, universal compatibility)
 
-# ---------- PRIVACY : Clear terminal history ----------
+# 清除终端历史（隐私保护）
 try {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     Clear-History
@@ -18,11 +18,11 @@ try {
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
 
-# Local IP – silently fallback to ipconfig if Get-NetIPAddress fails
+# IP地址获取（自动回退到 ipconfig，无红字）
 $localIp = "Unknown"
 try {
-    $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -ErrorAction Stop |
-        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+    $temp = Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -ErrorAction Stop 2>$null
+    $localIp = ($temp | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 } catch {
     try {
         $lines = & ipconfig.exe | Select-String "IPv4 Address"
@@ -30,10 +30,11 @@ try {
     } catch {}
 }
 
-# MAC Address – silently fallback to getmac if Get-NetAdapter fails
+# MAC地址获取（自动回退到 getmac，无红字）
 $macAddress = "UNKNOWN"
 try {
-    $macAddress = (Get-NetAdapter -ErrorAction Stop | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
+    $temp = Get-NetAdapter -ErrorAction Stop 2>$null
+    $macAddress = ($temp | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
 } catch {
     try {
         $macOutput = & getmac.exe /fo csv
@@ -42,11 +43,11 @@ try {
     } catch {}
 }
 
-# Brand
+# 品牌（制造商）
 $brand = "Unknown"
 try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; if ($cs.Manufacturer) { $brand = $cs.Manufacturer } } catch {}
 
-# Windows Version
+# Windows版本
 $windowsVersion = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -56,11 +57,11 @@ try {
     $windowsVersion = $caption
 } catch {}
 
-# Install Date
+# 安装日期
 $installDate = "Unknown"
 try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop; if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") } } catch {}
 
-# Processor
+# 处理器
 $processor = "Unknown"
 try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
@@ -68,7 +69,7 @@ try {
     if ($processor.Length -gt 45) { $processor = $processor.Substring(0, 45) + "..." }
 } catch {}
 
-# RAM
+# 内存
 $ram = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -76,7 +77,7 @@ try {
     $ram = "$totalGB GB"
 } catch {}
 
-# Storage (C:)
+# C盘存储
 $storage = "Unknown"
 try {
     $cDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop
@@ -196,7 +197,7 @@ function Invoke-DeepClean {
 }
 
 function Exit-And-Clean {
-    # Final history cleanup
+    # 最终历史记录清理
     try {
         $historyPaths = @(
             "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
@@ -218,7 +219,7 @@ function Get-MASVersion {
 }
 
 # ------------------------------------------------------------
-#  MODERN CLEAN UI
+#  现代简洁界面
 # ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
