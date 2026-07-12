@@ -1,18 +1,19 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Privacy Enhanced, History Eraser)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Clean then exit, Terminal-only privacy)
 
-# ---------- PRIVACY : Clear current session and delete irm.lcm.my from history file ----------
+# ---------- PRIVACY : Clear terminal history only ----------
 try {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     Clear-History
-    $historyPath = (Get-PSReadLineOption).HistorySavePath
-    if ($historyPath -and (Test-Path $historyPath)) {
-        $all = Get-Content $historyPath -ErrorAction Stop
-        $filtered = $all | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
-        $filtered | Set-Content $historyPath -Force -ErrorAction Stop
+    $historyPaths = @(
+        "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
+        (Get-PSReadLineOption).HistorySavePath
+    )
+    foreach ($hp in $historyPaths) {
+        if ($hp -and (Test-Path $hp)) {
+            Remove-Item $hp -Force -ErrorAction SilentlyContinue
+        }
     }
-} catch {
-    # Silently continue if any step fails (e.g., older PowerShell)
-}
+} catch {}
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -28,27 +29,21 @@ try {
 
 # Brand
 $brand = "Unknown"
-try {
-    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-    if ($cs.Manufacturer) { $brand = $cs.Manufacturer }
-} catch {}
+try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; if ($cs.Manufacturer) { $brand = $cs.Manufacturer } } catch {}
 
 # Windows Version
 $windowsVersion = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
     $caption = $os.Caption -replace 'Microsoft ', ''
-    $displayVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DisplayVersion
-    if ($displayVersion) { $caption += " $displayVersion" }
+    $dv = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DisplayVersion
+    if ($dv) { $caption += " $dv" }
     $windowsVersion = $caption
 } catch {}
 
 # Install Date
 $installDate = "Unknown"
-try {
-    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-    if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") }
-} catch {}
+try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop; if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") } } catch {}
 
 # Processor
 $processor = "Unknown"
@@ -142,16 +137,7 @@ exit
             Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
             Write-Host "`n  [!] No key was pressed. Exiting all terminals..." -ForegroundColor Red
             Start-Sleep -Seconds 1
-            # ---- Final history cleanup on exit ----
-            try {
-                $hp = (Get-PSReadLineOption).HistorySavePath
-                if ($hp -and (Test-Path $hp)) {
-                    $lines = Get-Content $hp -ErrorAction Stop
-                    $clean = $lines | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
-                    $clean | Set-Content $hp -Force -ErrorAction Stop
-                }
-            } catch {}
-            exit
+            Exit-And-Clean
         } else {
             Write-Host "`n  [+] User pressed a key. Returning to main menu." -ForegroundColor Cyan
         }
@@ -163,7 +149,7 @@ exit
 }
 
 function Invoke-DeepClean {
-    Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
+    Write-Host "`n  [+] Deep cleaning system temporary files...`n" -ForegroundColor Cyan
 
     $folders = @(
         $env:TEMP,
@@ -174,55 +160,38 @@ function Invoke-DeepClean {
         "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files"
     )
 
-    $spinner = @('|', '/', '-', '\')
-    $spinnerIndex = 0
-
     foreach ($folder in $folders) {
         if (Test-Path $folder) {
-            Write-Host "`n  Cleaning: $folder" -ForegroundColor DarkGray
-            Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
-                $spinnerIndex = ($spinnerIndex + 1) % 4
-                $spin = $spinner[$spinnerIndex]
-                Write-Host "`r  $spin Processing: $($_.FullName)" -NoNewline
-                try {
-                    Remove-Item $_.FullName -Force -Recurse -ErrorAction Stop
-                } catch {}
+            Write-Host "  Cleaning: $folder" -ForegroundColor DarkGray
+            $files = Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue
+            $cnt = 0
+            foreach ($file in $files) {
+                try { Remove-Item $file.FullName -Force -Recurse -ErrorAction Stop } catch {}
+                $cnt++
+                if ($cnt % 50 -eq 0) { Write-Host "." -NoNewline }
             }
-            Write-Host "`r" -NoNewline
-            Write-Host (" " * 60) -NoNewline
-            Write-Host "`r" -NoNewline
+            Write-Host " Done."
         }
     }
 
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "`n  [+] PC Optimized successfully. Press any key to return to main menu." -ForegroundColor Green
-    Write-Host "  Will auto-exit in 7 seconds if no key is pressed." -ForegroundColor DarkGray
+    Write-Host "`n  [+] PC Optimized successfully. Exiting all terminals now..." -ForegroundColor Green
+    Start-Sleep -Seconds 2
+    Exit-And-Clean
+}
 
-    $timeout = 7
-    $keyPressed = $false
-    while ($timeout -gt 0 -and -not $keyPressed) {
-        if ([Console]::KeyAvailable) {
-            $keyInfo = [Console]::ReadKey($true)
-            $keyPressed = $true
-        } else {
-            Start-Sleep -Seconds 1
-            $timeout--
+function Exit-And-Clean {
+    # Final history cleanup (no clipboard)
+    try {
+        $historyPaths = @(
+            "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
+            (Get-PSReadLineOption).HistorySavePath
+        )
+        foreach ($hp in $historyPaths) {
+            if ($hp -and (Test-Path $hp)) { Remove-Item $hp -Force -ErrorAction SilentlyContinue }
         }
-    }
-
-    if ($keyPressed) { return }
-    else {
-        # ---- Final history cleanup on exit ----
-        try {
-            $hp = (Get-PSReadLineOption).HistorySavePath
-            if ($hp -and (Test-Path $hp)) {
-                $lines = Get-Content $hp -ErrorAction Stop
-                $clean = $lines | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
-                $clean | Set-Content $hp -Force -ErrorAction Stop
-            }
-        } catch {}
-        exit
-    }
+    } catch {}
+    exit
 }
 
 function Get-MASVersion {
@@ -267,18 +236,7 @@ while ($true) {
     $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
     Write-Host "$key" -ForegroundColor White
 
-    if ($key -eq '0') {
-        # ---- Exit selected: clean history and exit ----
-        try {
-            $hp = (Get-PSReadLineOption).HistorySavePath
-            if ($hp -and (Test-Path $hp)) {
-                $lines = Get-Content $hp -ErrorAction Stop
-                $clean = $lines | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
-                $clean | Set-Content $hp -Force -ErrorAction Stop
-            }
-        } catch {}
-        exit
-    }
+    if ($key -eq '0') { Exit-And-Clean }
 
     switch ($key) {
         '1' { Start-Activation "/HWID" "Windows Activation" }
