@@ -1,8 +1,18 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, Clean Exit, History Clear, Progress)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Privacy Enhanced, History Eraser)
 
-# Clear history immediately (no arrow-up leak)
-try { [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory() } catch {}
-try { Clear-History } catch {}
+# ---------- PRIVACY : Clear current session and delete irm.lcm.my from history file ----------
+try {
+    [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
+    Clear-History
+    $historyPath = (Get-PSReadLineOption).HistorySavePath
+    if ($historyPath -and (Test-Path $historyPath)) {
+        $all = Get-Content $historyPath -ErrorAction Stop
+        $filtered = $all | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
+        $filtered | Set-Content $historyPath -Force -ErrorAction Stop
+    }
+} catch {
+    # Silently continue if any step fails (e.g., older PowerShell)
+}
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -99,10 +109,8 @@ function Start-Activation {
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Remove old flag
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-        # Wrapper: wait for keypress, else create flag file to signal main script to exit
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -127,18 +135,22 @@ exit
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
-        # Launch the activation window and keep its process object
         $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
-
-        # Wait until the activation window closes (no infinite wait)
         $proc.WaitForExit()
 
-        # Now check if the flag file was created (meaning timeout occurred)
         if (Test-Path $flagFile) {
             Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
             Write-Host "`n  [!] No key was pressed. Exiting all terminals..." -ForegroundColor Red
             Start-Sleep -Seconds 1
-            # This will close the main PowerShell window
+            # ---- Final history cleanup on exit ----
+            try {
+                $hp = (Get-PSReadLineOption).HistorySavePath
+                if ($hp -and (Test-Path $hp)) {
+                    $lines = Get-Content $hp -ErrorAction Stop
+                    $clean = $lines | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
+                    $clean | Set-Content $hp -Force -ErrorAction Stop
+                }
+            } catch {}
             exit
         } else {
             Write-Host "`n  [+] User pressed a key. Returning to main menu." -ForegroundColor Cyan
@@ -174,13 +186,10 @@ function Invoke-DeepClean {
                 Write-Host "`r  $spin Processing: $($_.FullName)" -NoNewline
                 try {
                     Remove-Item $_.FullName -Force -Recurse -ErrorAction Stop
-                } catch {
-                    # Some files may be locked; we skip them silently
-                }
+                } catch {}
             }
-            # Clear the progress line
             Write-Host "`r" -NoNewline
-            Write-Host (" " * 60) -NoNewline   # erase the line
+            Write-Host (" " * 60) -NoNewline
             Write-Host "`r" -NoNewline
         }
     }
@@ -201,7 +210,19 @@ function Invoke-DeepClean {
         }
     }
 
-    if ($keyPressed) { return } else { exit }
+    if ($keyPressed) { return }
+    else {
+        # ---- Final history cleanup on exit ----
+        try {
+            $hp = (Get-PSReadLineOption).HistorySavePath
+            if ($hp -and (Test-Path $hp)) {
+                $lines = Get-Content $hp -ErrorAction Stop
+                $clean = $lines | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
+                $clean | Set-Content $hp -Force -ErrorAction Stop
+            }
+        } catch {}
+        exit
+    }
 }
 
 function Get-MASVersion {
@@ -213,7 +234,7 @@ function Get-MASVersion {
 }
 
 # ------------------------------------------------------------
-#  MODERN CLEAN UI (No boxes, only subtle separators)
+#  MODERN CLEAN UI
 # ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
@@ -246,7 +267,18 @@ while ($true) {
     $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
     Write-Host "$key" -ForegroundColor White
 
-    if ($key -eq '0') { exit }
+    if ($key -eq '0') {
+        # ---- Exit selected: clean history and exit ----
+        try {
+            $hp = (Get-PSReadLineOption).HistorySavePath
+            if ($hp -and (Test-Path $hp)) {
+                $lines = Get-Content $hp -ErrorAction Stop
+                $clean = $lines | Where-Object { $_ -notmatch 'irm\.lcm\.my' }
+                $clean | Set-Content $hp -Force -ErrorAction Stop
+            }
+        } catch {}
+        exit
+    }
 
     switch ($key) {
         '1' { Start-Activation "/HWID" "Windows Activation" }
