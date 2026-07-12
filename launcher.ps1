@@ -1,5 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1
-# Fetches latest MAS scripts from official repo, modifies title and menu, runs in new window.
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Auto-download with fallback, deep clean)
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
@@ -12,7 +11,6 @@ try {
     $macAddress = "UNKNOWN"
 }
 
-# Password Verification
 $password = Read-Host "key" -AsSecureString
 $passString = if ($password) {
     [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -25,70 +23,72 @@ if ($passString -ne "8888") {
     exit
 }
 
-# ---------------------------------------------------------
-# Download, modify title/menu, and execute in new window
-# ---------------------------------------------------------
 function Invoke-ModifiedScript {
     param(
-        [string]$ScriptName,             # 'HWID_Activation.cmd' or 'Ohook_Activation_AIO.cmd'
-        [string]$CustomTitle,            # New title for the window
-        [hashtable]$Replacements         # Additional text replacements (e.g., menu items)
+        [string]$ScriptName,
+        [string]$CustomTitle,
+        [string]$ValidationKeyword
     )
-
     Write-Host "`n  [+] Access Granted! Initializing..." -ForegroundColor Green
-
     $tempPath = "$env:TEMP\$ScriptName"
-    $baseRawUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators"
-
+    $baseUrl = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators"
     try {
-        # Download the original script from official repo
-        $rawText = & curl.exe -sSfL --doh-url https://1.1.1.1/dns-query "$baseRawUrl/$ScriptName" | Out-String
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to download $ScriptName. Check your internet connection."
+        try {
+            $rawText = Invoke-RestMethod -Uri "$baseUrl/$ScriptName" -ErrorAction Stop
+        } catch {
+            Write-Host "  [!] Invoke-RestMethod failed, trying curl..." -ForegroundColor Yellow
+            $rawText = & curl.exe -sSfL --doh-url https://1.1.1.1/dns-query "$baseUrl/$ScriptName" | Out-String
+            if ($LASTEXITCODE -ne 0) { throw "Both download methods failed." }
         }
-
-        # Replace the window title (first occurrence)
-        if ($ScriptName -eq "HWID_Activation.cmd") {
-            $rawText = $rawText -replace 'title\s+HWID Activation.*', "title  $CustomTitle"
-        } elseif ($ScriptName -eq "Ohook_Activation_AIO.cmd") {
-            # Change title
-            $rawText = $rawText -replace 'title\s+Ohook Activation.*', "title  $CustomTitle"
-            # Change menu texts (the Ohook menu lines)
+        if ($rawText -notmatch $ValidationKeyword) {
+            throw "Downloaded content does not contain '$ValidationKeyword'. Script may have moved."
+        }
+        $rawText = $rawText -replace '(?im)^\s*title\s+.*$', "title  $CustomTitle"
+        if ($ScriptName -eq "Ohook_Activation_AIO.cmd") {
             $rawText = $rawText -replace 'Install Ohook Office Activation', 'Install THE ONE Office Activation'
             $rawText = $rawText -replace 'Uninstall Ohook', 'Uninstall THE ONE'
-            # Change "Ohook activation is not installed" / "uninstalled" messages
             $rawText = $rawText -replace 'Ohook activation is not installed\.', 'THE ONE activation is not installed.'
             $rawText = $rawText -replace 'Successfully uninstalled Ohook activation\.', 'Successfully uninstalled THE ONE activation.'
             $rawText = $rawText -replace 'Failed to uninstall Ohook activation\.', 'Failed to uninstall THE ONE activation.'
-            $rawText = $rawText -replace 'Uninstalling Ohook activation\.\.\.', 'Uninstalling THE ONE activation...'
-            # Change any "Installing Ohook" messages
+            $rawText = $rawText -replace 'Uninstalling Ohook activation', 'Uninstalling THE ONE activation'
             $rawText = $rawText -replace 'Installing Ohook\b', 'Installing THE ONE'
-            # Change "Remove Previous Ohook Install"
             $rawText = $rawText -replace 'Remove Previous Ohook Install', 'Remove Previous THE ONE Install'
-            # Change Smart App Control message
             $rawText = $rawText -replace 'after Ohook activation', 'after THE ONE activation'
         }
-
-        # Save as UTF-8 without BOM (preserves special characters)
         $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
         [System.IO.File]::WriteAllText($tempPath, $rawText, $utf8NoBom)
-
-        # Launch the .cmd file in a NEW console window
         Start-Process -FilePath $tempPath
-
         Start-Sleep -Seconds 3
         Remove-Item -Path $tempPath -Force -ErrorAction SilentlyContinue
-    }
-    catch {
+    } catch {
         Write-Host "  [-] Execution failed!" -ForegroundColor Red
         Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Yellow
         Start-Sleep -Seconds 5
     }
 }
 
-# ---------------------------------------------------------
-# Main Menu Loop (Professional IT Color Scheme)
-# ---------------------------------------------------------
+function Invoke-DeepClean {
+    Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
+    $folders = @(
+        $env:TEMP,
+        "$env:SystemRoot\Temp",
+        "$env:SystemRoot\Prefetch",
+        [Environment]::GetFolderPath('Recent'),
+        "$env:LOCALAPPDATA\Microsoft\Windows\INetCache",
+        "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files"
+    )
+    foreach ($folder in $folders) {
+        if (Test-Path $folder) {
+            Write-Host "  Cleaning: $folder" -ForegroundColor DarkGray
+            Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue |
+                Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+        }
+    }
+    try { cleanmgr /sagerun:1 | Out-Null } catch {}
+    Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
+    Write-Host "`n  (Note: Files locked by running programs cannot be deleted.)" -ForegroundColor DarkGray
+}
+
 while ($true) {
     Clear-Host
     Write-Host "`n  T H E   O N E   S Y S T E M S   v3.1" -ForegroundColor Cyan
@@ -113,21 +113,17 @@ while ($true) {
 
     switch ($key) {
         '1' {
-            Invoke-ModifiedScript -ScriptName "HWID_Activation.cmd" -CustomTitle "THE ONE WINDOWS AUTHORIZED v3.1"
+            Invoke-ModifiedScript -ScriptName "HWID_Activation.cmd" `
+                -CustomTitle "THE ONE WINDOWS AUTHORIZED v3.1" `
+                -ValidationKeyword "masver"
         }
         '2' {
-            Invoke-ModifiedScript -ScriptName "Ohook_Activation_AIO.cmd" -CustomTitle "THE ONE OFFICE AUTHORIZED v3.1"
+            Invoke-ModifiedScript -ScriptName "Ohook_Activation_AIO.cmd" `
+                -CustomTitle "THE ONE OFFICE AUTHORIZED v3.1" `
+                -ValidationKeyword "oh_menu"
         }
         '3' {
-            Write-Host "`n  [+] Cleaning temporary files..." -ForegroundColor Cyan
-            $tempFolders = @($env:TEMP, "$env:SystemRoot\Temp")
-            foreach ($folder in $tempFolders) {
-                if (Test-Path $folder) {
-                    Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue |
-                        Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-                }
-            }
-            Write-Host "  [+] PC Optimized successfully." -ForegroundColor Green
+            Invoke-DeepClean
             Write-Host "`n  Press any key to return to menu..." -ForegroundColor DarkGray
             $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") | Out-Null
         }
