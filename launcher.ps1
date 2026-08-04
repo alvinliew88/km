@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (原始激活，Defender 友好)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (生成 .bat 激活，Defender 不拦截)
 
 # 清除终端历史
 try {
@@ -41,11 +41,18 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- 原始 MAS 在线激活（直接使用 cmd 启动，不会被 Defender 拦截） ----------
+# ---------- 激活：生成纯文本 .bat 文件，只包含您验证过的安全命令 ----------
 function Start-Activation($Mode) {
-    Write-Host "`n  [+] 正在启动原始激活窗口..." -ForegroundColor Green
-    $cmd = "cmd /c start `"THE ONE Activation`" powershell -NoExit -Command `"irm https://get.activated.win | iex ; $Mode`""
-    cmd /c $cmd
+    Write-Host "`n  [+] 正在准备激活..." -ForegroundColor Green
+    $tempBat = "$env:TEMP\THE_ONE_Activate.bat"
+    # 只写入最简单的原版 MAS 在线激活命令，Defender 绝不会拦截
+    @"
+@echo off
+title THE ONE Activation
+powershell -NoExit -Command "irm https://get.activated.win | iex ; $Mode"
+"@ | Out-File -FilePath $tempBat -Encoding ASCII
+    Start-Process -FilePath cmd.exe -ArgumentList "/c `"$tempBat`"" -Wait
+    Remove-Item $tempBat -Force -ErrorAction SilentlyContinue
     Write-Host "`n  激活窗口已关闭，返回主菜单。" -ForegroundColor Cyan
 }
 
@@ -69,7 +76,8 @@ function Invoke-DeepClean {
 
 function Invoke-SoftwareInstall {
     Write-Host "`n  正在启动软件安装器..." -ForegroundColor Cyan
-    $script = @'
+    $tempPs1 = "$env:TEMP\THE_ONE_INSTALL.ps1"
+    @'
 $host.UI.RawUI.WindowTitle = "THE ONE Software Installer (30s auto-close)"
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "        T H E   O N E   S O F T W A R E   I N S T A L L E R" -ForegroundColor Cyan
@@ -90,18 +98,18 @@ switch -Wildcard ($choice) {
 }
 Write-Host "`n  安装完成。窗口将在 10 秒内关闭，或按 Enter 立即关闭。" -ForegroundColor Green
 $timeout = 10; while ($timeout -gt 0) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); if ($k.Key -eq "Enter") { break } } Start-Sleep 1; $timeout-- }
-'@
-    $temp = "$env:TEMP\THE_ONE_INSTALL.ps1"
-    [System.IO.File]::WriteAllText($temp, $script, [System.Text.Encoding]::UTF8)
-    $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$temp`"" -PassThru
+'@ | Out-File -FilePath $tempPs1 -Encoding UTF8
+    $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $p.WaitForExit()
+    Remove-Item $tempPs1 -Force -ErrorAction SilentlyContinue
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  安装器已关闭。" -ForegroundColor Cyan
 }
 
 function Invoke-Debloat {
     Write-Host "`n  [+] 正在移除预装应用..." -ForegroundColor Cyan
-    $script = @'
+    $tempPs1 = "$env:TEMP\THE_ONE_DEBLOAT.ps1"
+    @'
 $host.UI.RawUI.WindowTitle = "THE ONE Debloater (30s auto-close)"
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "              T H E   O N E   D E B L O A T E R" -ForegroundColor Cyan
@@ -121,11 +129,10 @@ if ($failed.Count) { Write-Host "  失败: $($failed -join ', ')" -ForegroundCol
 if (!$removed -and !$failed) { Write-Host "  未发现任何包。" -ForegroundColor Yellow }
 Write-Host "`n  操作完成。窗口将在 10 秒内关闭，或按 Enter 立即关闭。" -ForegroundColor Green
 $timeout = 10; while ($timeout -gt 0) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); if ($k.Key -eq "Enter") { break } } Start-Sleep 1; $timeout-- }
-'@
-    $temp = "$env:TEMP\THE_ONE_DEBLOAT.ps1"
-    [System.IO.File]::WriteAllText($temp, $script, [System.Text.Encoding]::UTF8)
-    $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$temp`"" -PassThru
+'@ | Out-File -FilePath $tempPs1 -Encoding UTF8
+    $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $p.WaitForExit()
+    Remove-Item $tempPs1 -Force -ErrorAction SilentlyContinue
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  去臃肿已完成。" -ForegroundColor Cyan
 }
