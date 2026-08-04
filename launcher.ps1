@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Reliable activation, no timeout in sub-window)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable activation, no errors, fast)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -104,63 +104,51 @@ try {
     }
 } catch {}
 
-# ----- Download MAS AIO with correct primary URL and fallback -----
+# ----- Download MAS AIO with fallback -----
 function Get-MASScript {
     $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
     $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
     try {
-        Write-Host "  Downloading latest MAS script..." -ForegroundColor Gray
         $raw = Invoke-RestMethod -Uri $primaryUrl -ErrorAction Stop
         if ($raw -match 'MAS_AIO') { return $raw }
     } catch {}
     try {
-        Write-Host "  Primary URL failed, trying fallback..." -ForegroundColor Yellow
         $raw = Invoke-RestMethod -Uri $fallbackUrl -ErrorAction Stop
         if ($raw -match 'MAS_AIO') { return $raw }
     } catch {}
     throw "Unable to download MAS script from any known URL."
 }
 
-# ----- Activation (reliable, no timeout) -----
+# ----- Activation (reliable, no wrapper, no errors) -----
 function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
-    Write-Host "  A new window will open. After activation finishes, close that window to return here." -ForegroundColor Cyan
 
-    $tempAIO   = "$env:TEMP\THE_ONE_AIO.cmd"
-    $tempRun   = "$env:TEMP\THE_ONE_RUN.cmd"
+    $tempScript = "$env:TEMP\THE_ONE_AIO.cmd"
 
     try {
+        Write-Host "  Downloading latest MAS script (please wait)..." -ForegroundColor Gray
         $raw = Get-MASScript
         $ver = $script:masver
+
+        # Only change the title line, preserve everything else
         $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
+
+        # Ensure correct line endings and final empty line
         $raw = $raw -replace '(?<!\r)\n', "`r`n"
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
 
-        [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
+        # Save as UTF-8 without BOM (critical for batch script compatibility)
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($tempScript, $raw, $utf8NoBom)
 
-        # Simple wrapper: run activation then pause forever until user closes window
-        $wrapper = @"
-@echo off
-title  THE ONE $FriendlyName v$ver
-echo.
-echo   --------------------------------------------------------
-echo          T H E   O N E   S Y S T E M S   v$ver
-echo   --------------------------------------------------------
-echo.
-call "$tempAIO" $Mode
-echo.
-echo   --------------------------------------------------------
-echo    Activation finished. Press any key to close this window.
-echo   --------------------------------------------------------
-pause >nul
-"@
-        [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
-
-        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
+        Write-Host "  Launching activation window..." -ForegroundColor Cyan
+        # Use cmd.exe /k to keep the window open after script finishes
+        $argumentList = "/k `"$tempScript`" $Mode & echo. & echo Activation finished. Press any key to close this window. & pause >nul"
+        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList $argumentList -PassThru
         $proc.WaitForExit()
 
-        Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
+        Write-Host "  Activation window closed. Returning to main menu." -ForegroundColor Cyan
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
