@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (Direct activation fix, English UI)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Pure English, direct HWID/Ohook activation)
 
 # Clear terminal history
 try {
@@ -41,17 +41,18 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- Direct activation via MAS functions (no menu) ----------
+# ---------- Direct activation using MAS functions ----------
 function Start-Activation($Mode) {
     Write-Host "`n  [+] Preparing activation..." -ForegroundColor Green
     $tempBat = "$env:TEMP\THE_ONE_Activate.bat"
-    # Call the correct function directly: HWID or Ohook
-    if ($Mode -eq "/HWID") { $masCommand = "HWID" } else { $masCommand = "Ohook" }
-    @"
+    # Use correct MAS function names: HWID or Ohook
+    if ($Mode -eq "/HWID") { $masFunction = "HWID" } else { $masFunction = "Ohook" }
+    $batContent = @"
 @echo off
 title THE ONE Activation
-powershell -NoExit -Command "irm https://get.activated.win | iex; $masCommand"
-"@ | Out-File -FilePath $tempBat -Encoding ASCII
+powershell -NoExit -Command "irm https://get.activated.win | iex; $masFunction"
+"@
+    [System.IO.File]::WriteAllText($tempBat, $batContent, [System.Text.Encoding]::ASCII)
     Start-Process -FilePath cmd.exe -ArgumentList "/c `"$tempBat`"" -Wait
     Remove-Item $tempBat -Force -ErrorAction SilentlyContinue
     Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
