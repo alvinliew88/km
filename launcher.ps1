@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: GIMP included, PDF24 multi-ID, version fix)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: PDF24 direct download, debloat confirmation, version fix)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -205,7 +205,7 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – GIMP included, PDF24 multi-ID + web fallback -----
+# ----- Software Installer (Menu 5) – PDF24 direct download with verification -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
@@ -237,22 +237,39 @@ Write-Host "  └─────────────────────
 $choice = Read-Host "  Enter your choice"
 
 function Install-PDF24 {
-    Write-Host "  Attempting to install PDF24 via winget..." -ForegroundColor Yellow
+    Write-Host "  Attempting to install PDF24..." -ForegroundColor Yellow
+    # Try multiple winget IDs plus a generic search
     $ids = @("PDF24.PDF24", "PDF24.Creator", "geeksoftware.PDF24.Creator")
     $installed = $false
     foreach ($id in $ids) {
         winget install --id $id --silent --accept-source-agreements --accept-package-agreements
-        if ($LASTEXITCODE -eq 0) {
-            $installed = $true
-            Write-Host "  Successfully installed using ID: $id" -ForegroundColor Green
-            break
-        }
+        if ($LASTEXITCODE -eq 0) { $installed = $true; Write-Host "  Successfully installed via winget ID: $id" -ForegroundColor Green; break }
     }
     if (-not $installed) {
-        Write-Host "  Could not install PDF24 automatically." -ForegroundColor Red
-        Write-Host "  Opening official download page in your browser..." -ForegroundColor Yellow
-        Start-Process "https://tools.pdf24.org/en/creator"
-        Write-Host "  Please download and install manually." -ForegroundColor Cyan
+        Write-Host "  winget IDs failed, trying generic search..." -ForegroundColor Gray
+        winget install PDF24 --silent --accept-source-agreements --accept-package-agreements
+        if ($LASTEXITCODE -eq 0) { $installed = $true; Write-Host "  Successfully installed via winget search." -ForegroundColor Green }
+    }
+    if (-not $installed) {
+        Write-Host "  winget failed, downloading offline installer directly..." -ForegroundColor Gray
+        $url = "https://download.pdf24.org/pdf24-creator-setup.exe"
+        $tempSetup = "$env:TEMP\pdf24-setup.exe"
+        try {
+            Invoke-WebRequest -Uri $url -OutFile $tempSetup -ErrorAction Stop -UseBasicParsing
+            if ((Get-Item $tempSetup).Length -gt 1MB) {
+                Write-Host "  Download successful, running installer..." -ForegroundColor Green
+                Start-Process -FilePath $tempSetup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+                Write-Host "  PDF24 installation completed." -ForegroundColor Green
+            } else {
+                throw "Downloaded file is too small, likely corrupt."
+            }
+        } catch {
+            Write-Host "  Direct download failed: $_" -ForegroundColor Red
+            Write-Host "  Opening official download page as last resort..." -ForegroundColor Yellow
+            Start-Process "https://tools.pdf24.org/en/creator"
+        } finally {
+            Remove-Item $tempSetup -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -293,7 +310,7 @@ while ($timeout -gt 0) {
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
-# ----- Debloat Windows (Menu 6) – Stable -----
+# ----- Debloat Windows (Menu 6) – Confirmation, list apps, stable return -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
@@ -329,6 +346,18 @@ $packages = @(
     'Microsoft.ZuneMusic',
     'Microsoft.ZuneVideo'
 )
+Write-Host "  The following apps will be removed:" -ForegroundColor White
+foreach ($p in $packages) {
+    Write-Host "    - $p" -ForegroundColor Gray
+}
+Write-Host "`n  Press 1 to confirm removal, or any other key to cancel." -ForegroundColor Yellow
+$confirm = Read-Host "  Your choice"
+if ($confirm -ne '1') {
+    Write-Host "  Removal cancelled." -ForegroundColor Yellow
+    Start-Sleep -Seconds 2
+    exit
+}
+
 $removed = @()
 $failed  = @()
 foreach ($pkg in $packages) {
@@ -339,7 +368,7 @@ foreach ($pkg in $packages) {
         $failed += $pkg
     }
 }
-if ($removed.Count -gt 0) { Write-Host "  Removed: $($removed -join ', ')" -ForegroundColor Green }
+if ($removed.Count -gt 0) { Write-Host "`n  Removed: $($removed -join ', ')" -ForegroundColor Green }
 if ($failed.Count -gt 0) { Write-Host "  Failed: $($failed -join ', ')" -ForegroundColor Red }
 if ($removed.Count -eq 0 -and $failed.Count -eq 0) { Write-Host "  No packages found to remove." -ForegroundColor Yellow }
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
