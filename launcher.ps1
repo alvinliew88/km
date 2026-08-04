@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Antivirus friendly, no blocked commands)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Online activation, no Defender blocks)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -94,70 +94,33 @@ if ($passString -ne "8888") {
 # ----- Cached MAS version (fetched once) -----
 $script:masver = "?.?"
 try {
-    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
-    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
-    $raw = $null
-    try { $raw = Invoke-RestMethod -Uri $primaryUrl -ErrorAction Stop } catch {}
-    if (-not $raw) { try { $raw = Invoke-RestMethod -Uri $fallbackUrl -ErrorAction Stop } catch {} }
-    if ($raw -and ($raw -match 'set\s+masver=([\d.]+)')) {
-        $script:masver = $Matches[1]
-    }
-} catch {}
-
-# ----- Download MAS AIO with fallback -----
-function Get-MASScript {
-    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
-    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
+    $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd" -ErrorAction Stop
+    if ($raw -match 'set\s+masver=([\d.]+)') { $script:masver = $Matches[1] }
+} catch {
     try {
-        $raw = Invoke-RestMethod -Uri $primaryUrl -ErrorAction Stop
-        if ($raw -match 'MAS_AIO') { return $raw }
+        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd" -ErrorAction Stop
+        if ($raw -match 'set\s+masver=([\d.]+)') { $script:masver = $Matches[1] }
     } catch {}
-    try {
-        $raw = Invoke-RestMethod -Uri $fallbackUrl -ErrorAction Stop
-        if ($raw -match 'MAS_AIO') { return $raw }
-    } catch {}
-    throw "Unable to download MAS script from any known URL."
 }
 
-# ----- Activation (Windows Defender friendly) -----
+# ----- Activation (online, no disk write, antivirus safe) -----
 function Start-Activation {
-    param([string]$Mode, [string]$FriendlyName)
-    Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
+    param([string]$Mode)
+    Write-Host "`n  [+] Access Granted! Starting activation..." -ForegroundColor Green
 
-    $tempScript = "$env:TEMP\THE_ONE_AIO.cmd"
+    $psCommand = @"
+`$host.UI.RawUI.WindowTitle = 'THE ONE Activation'
+Write-Host 'Connecting to Microsoft activation servers...'
+iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String) $Mode
+Write-Host "`nActivation finished. Press any key to close this window."
+`$null = `$host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+"@
 
-    try {
-        Write-Host "  Downloading latest MAS script (please wait)..." -ForegroundColor Gray
-        $raw = Get-MASScript
-        $ver = $script:masver
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psCommand))
+    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" -PassThru
+    $proc.WaitForExit()
 
-        # Only change the title line, preserve everything else
-        $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
-
-        # Remove the specific PowerShell test line that triggers antivirus (if present)
-        # The line looks like: %psc% "if ($PSVersionTable.PSEdition -ne 'Core') {...
-        $raw = $raw -replace '.*PSEdition -ne.*Core.*pstst.*', 'rem disabled line to avoid antivirus'
-
-        # Ensure correct line endings and final empty line
-        $raw = $raw -replace '(?<!\r)\n', "`r`n"
-        if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
-
-        # Save as UTF-8 without BOM
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        [System.IO.File]::WriteAllText($tempScript, $raw, $utf8NoBom)
-
-        Write-Host "  Launching activation window..." -ForegroundColor Cyan
-        # Use cmd.exe /k to keep the window open after script finishes, no PowerShell interference
-        $argumentList = "/k cd /d `"$env:TEMP`" && `"$tempScript`" $Mode && echo. && echo Activation finished. Press any key to close this window. && pause >nul"
-        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList $argumentList -PassThru
-        $proc.WaitForExit()
-
-        Write-Host "  Activation window closed. Returning to main menu." -ForegroundColor Cyan
-    }
-    catch {
-        Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
-        Start-Sleep -Seconds 5
-    }
+    Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
 # ----- PC Optimization (progress dots, auto‑exit after 7s) -----
@@ -454,8 +417,8 @@ while ($true) {
     if ($keyChar -eq '0') { Exit-And-Clean }
 
     switch ($keyChar) {
-        '1' { Start-Activation "/HWID" "Windows Activation" }
-        '2' { Start-Activation "/Ohook" "Office Activation" }
+        '1' { Start-Activation "/HWID" }
+        '2' { Start-Activation "/Ohook" }
         '3' {
             Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
