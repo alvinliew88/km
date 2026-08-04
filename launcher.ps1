@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Fast, Simple UI, Countdown, Menu order adjusted)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Ultra-fast, no countdown errors, clean UI)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -421,7 +421,7 @@ function Exit-And-Clean {
 }
 
 # ============================================================
-#  MAIN MENU (Simple UI, 30-sec countdown, reordered)
+#  MAIN MENU (Simple, instant, 30s idle exit)
 # ============================================================
 while ($true) {
     Clear-Host
@@ -452,37 +452,27 @@ while ($true) {
     # Clear stray keys
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
 
-    # Countdown display
+    Write-Host "`n  > Select module (30s idle exit): " -NoNewline
     $timeout = 30
     $key = $null
-    $startTime = Get-Date
-    while ($null -eq $key -and $timeout -gt 0) {
-        $remaining = $timeout - [math]::Floor((Get-Date) - $startTime).TotalSeconds
-        if ($remaining -lt 0) { $remaining = 0 }
-        Write-Host "`r  > Select module (${remaining}s idle exit): " -NoNewline
-        $waitStart = Get-Date
-        while ($null -eq $key -and ((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
-            if ([Console]::KeyAvailable) {
-                $key = [Console]::ReadKey($true)
-                break
-            }
-            # Refresh countdown every second
-            if (((Get-Date) - $waitStart).TotalSeconds -ge 1) { break }
-            Start-Sleep -Milliseconds 200
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($sw.Elapsed.TotalSeconds -lt $timeout -and $null -eq $key) {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            break
         }
-        if ($null -eq $key) {
-            $timeout = $timeout - [math]::Floor((Get-Date) - $startTime).TotalSeconds
-        }
+        Start-Sleep -Milliseconds 200
     }
+    $sw.Stop()
 
     if ($null -eq $key) {
-        Write-Host "`r  [!] No input detected for 30 seconds. Exiting...                              " -ForegroundColor Red
+        Write-Host "`n  [!] No input detected for 30 seconds. Exiting..." -ForegroundColor Red
         Start-Sleep -Seconds 2
         Exit-And-Clean
     }
 
     $keyChar = $key.KeyChar
-    Write-Host "`r  > Select module (${timeout}s idle exit): $keyChar                              " -ForegroundColor White
+    Write-Host $keyChar -ForegroundColor White
 
     if ($keyChar -eq '0') { Exit-And-Clean }
 
