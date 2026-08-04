@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: Fixed version, PDF24 install, all fallbacks)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: Fixed PDF24 installer, fallbacks, version fix)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -205,7 +205,7 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – Fixed PDF24, robust fallbacks -----
+# ----- Software Installer (Menu 5) – PDF24 fixed with correct offline installer -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
@@ -238,18 +238,25 @@ $choice = Read-Host "  Enter your choice"
 
 function Install-PDF24 {
     Write-Host "  Attempting to install PDF24..." -ForegroundColor Yellow
-    # Try multiple winget IDs
+    # Try winget IDs first
     winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements
     if ($LASTEXITCODE -eq 0) { return }
     winget install --id geeksoftware.PDF24 --silent --accept-source-agreements --accept-package-agreements
     if ($LASTEXITCODE -eq 0) { return }
-    # Fallback to direct download of official silent installer
-    Write-Host "  winget failed, downloading official installer..." -ForegroundColor Gray
-    $url = "https://tools.pdf24.org/en/creator"
+    # Fallback to official offline installer
+    Write-Host "  winget failed, downloading official offline installer..." -ForegroundColor Gray
+    $url = "https://download.pdf24.org/pdf24-creator-offline-installer.exe"
     $tempSetup = "$env:TEMP\pdf24-setup.exe"
-    Invoke-WebRequest -Uri $url -OutFile $tempSetup -ErrorAction Stop
-    Start-Process -FilePath $tempSetup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
-    Remove-Item $tempSetup -Force -ErrorAction SilentlyContinue
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $tempSetup -ErrorAction Stop
+        if ((Get-Item $tempSetup).Length -lt 1MB) { throw "Downloaded file is too small, likely corrupt." }
+        Start-Process -FilePath $tempSetup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+        Write-Host "  PDF24 installation finished." -ForegroundColor Green
+    } catch {
+        Write-Host "  PDF24 installation failed: $_" -ForegroundColor Red
+    } finally {
+        Remove-Item $tempSetup -Force -ErrorAction SilentlyContinue
+    }
 }
 
 switch -Wildcard ($choice.ToUpper()) {
