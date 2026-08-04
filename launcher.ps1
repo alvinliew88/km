@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Full Suite: Activate, Optimize, Install, Debloat)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable Release: Fixed version, software installer, debloater)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -92,7 +92,7 @@ if ($passString -ne "8888") {
     exit
 }
 
-# ----- Universal helper: download official MAS AIO (dual fallback) -----
+# ----- Download MAS AIO with correct primary URL and fallback -----
 function Get-MASScript {
     $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
     $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
@@ -130,6 +130,7 @@ function Start-Activation {
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
+        # Wrapper script that runs activation and then waits
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -145,6 +146,7 @@ echo    Press any key within 7 seconds to return to main menu.
 echo    Otherwise ALL TERMINALS WILL BE CLOSED.
 echo   --------------------------------------------------------
 echo.
+
 choice /c 0 /t 7 /d 0 /n >nul
 if errorlevel 2 goto :stay
 echo timeout > "$flagFile"
@@ -204,40 +206,36 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- New: Software Installer (Menu 5) -----
+# ----- Software Installer (Menu 5) – Fixed: interactive window stays open -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
-    $tempRun = "$env:TEMP\THE_ONE_INSTALL.cmd"
-    $flagFile = "$env:TEMP\THE_ONE_EXIT.flag"
+    $tempDir = $env:TEMP
+    $flagFile = "$tempDir\THE_ONE_EXIT.flag"
     Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-    # Prepare winget check
-    $wingetCmd = "winget.exe"
-    $checkCmd = "where winget.exe >nul 2>&1 && echo INSTALLED || echo MISSING"
-
-    $batch = @"
+    $installerBatch = @'
 @echo off
+setlocal EnableDelayedExpansion
 title  THE ONE Software Installer
+
 echo.
 echo   --------------------------------------------------------
 echo        T H E   O N E   S O F T W A R E   I N S T A L L E R
 echo   --------------------------------------------------------
 echo.
-echo   Checking Windows Package Manager (winget)...
-$checkCmd > %TEMP%\winget_check.txt
-set /p WINGET_STATUS=<%TEMP%\winget_check.txt
-if "%WINGET_STATUS%"=="MISSING" (
-    echo   [ERROR] winget is not available on this system.
-    echo   Requires Windows 10 (1809+) or 11.
+
+where winget.exe >nul 2>&1
+if %errorlevel% neq 0 (
+    echo   [ERROR] Windows Package Manager (winget) not found.
+    echo   Please update your system or install App Installer from Microsoft Store.
     echo.
     echo   Press any key to return to main menu...
     pause >nul
     exit /b
 )
 
-echo   winget is available. Proceeding...
-echo.
+echo   Available software:
 echo   ┌─────────────────────────────────────────────┐
 echo   │  [1] Google Chrome                          │
 echo   │  [2] GIMP (Image Editor)                    │
@@ -248,9 +246,10 @@ echo   │  [A] Install ALL                            │
 echo   │  [0] Return to Main Menu                    │
 echo   └─────────────────────────────────────────────┘
 echo.
+
 set /p choice="  Enter your choice: "
 
-if /i "%choice%"=="0" goto :end
+if /i "%choice%"=="0" goto :return_menu
 if /i "%choice%"=="A" goto :all
 
 set "PKG="
@@ -260,9 +259,10 @@ if "%choice%"=="3" set "PKG=PDF24.PDF24"
 if "%choice%"=="4" set "PKG=7zip.7zip"
 if "%choice%"=="5" set "PKG=VideoLAN.VLC"
 if defined PKG goto :install_one
-echo   Invalid choice. Press any key...
+
+echo   Invalid choice. Press any key to try again...
 pause >nul
-exit /b
+goto :eof
 
 :install_one
 echo.
@@ -288,20 +288,21 @@ echo   --------------------------------------------------------
 echo.
 choice /c 0 /t 10 /d 0 /n >nul
 if errorlevel 2 goto :stay
-echo timeout > "$flagFile"
+echo timeout > "%flagFile%"
 :stay
 exit /b
 
-:end
-echo.
-echo   Returning to main menu...
-pause >nul
+:return_menu
+echo Returning to main menu...
+timeout /t 2 >nul
 exit /b
-"@
+'@
 
-    [System.IO.File]::WriteAllText($tempRun, $batch, [System.Text.Encoding]::ASCII)
+    $installerBatch = $installerBatch -replace '%flagFile%', $flagFile
+    $tempBatch = "$env:TEMP\THE_ONE_INSTALL.cmd"
+    [System.IO.File]::WriteAllText($tempBatch, $installerBatch, [System.Text.Encoding]::ASCII)
 
-    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
+    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempBatch`"" -PassThru
     $proc.WaitForExit()
 
     if (Test-Path $flagFile) {
@@ -314,20 +315,19 @@ exit /b
     }
 }
 
-# ----- New: Debloat Windows (Menu 6, no confirmation) -----
+# ----- Debloat Windows (Menu 6) – Fixed: execution stays open -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
-    $tempRun = "$env:TEMP\THE_ONE_DEBLOAT.cmd"
-    $flagFile = "$env:TEMP\THE_ONE_EXIT.flag"
+    $tempDir = $env:TEMP
+    $flagFile = "$tempDir\THE_ONE_EXIT.flag"
     Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-    # PowerShell command to remove the safe list of apps
-    $psCommand = @"
-`$packages = @(
-    'Microsoft.549981C3F5F10',       # Cortana
-    'Microsoft.MicrosoftOfficeHub',  # Office Hub
-    'Microsoft.OneDriveSync',        # OneDrive
+    $psCommand = @'
+$packages = @(
+    'Microsoft.549981C3F5F10',
+    'Microsoft.MicrosoftOfficeHub',
+    'Microsoft.OneDriveSync',
     'Microsoft.XboxApp',
     'Microsoft.XboxGameCallableUI',
     'Microsoft.XboxSpeechToTextOverlay',
@@ -349,21 +349,24 @@ function Invoke-Debloat {
     'Microsoft.ZuneMusic',
     'Microsoft.ZuneVideo'
 )
-`$removed = @()
-`$failed  = @()
-foreach (`$pkg in `$packages) {
+$removed = @()
+$failed  = @()
+foreach ($pkg in $packages) {
     try {
-        Get-AppxPackage -Name `$pkg -ErrorAction Stop | Remove-AppxPackage -ErrorAction Stop
-        `$removed += `$pkg
+        Get-AppxPackage -Name $pkg -ErrorAction Stop | Remove-AppxPackage -ErrorAction Stop
+        $removed += $pkg
     } catch {
-        `$failed += `$pkg
+        $failed += $pkg
     }
 }
-Write-Host "  Removed: $($removed -join ', ')"
-if (`$failed.Count -gt 0) { Write-Host "  Failed: $($failed -join ', ')" }
-"@
+if ($removed.Count -gt 0) { Write-Host "Removed: $($removed -join ', ')" }
+if ($failed.Count -gt 0) { Write-Host "Failed: $($failed -join ', ')" }
+'@
 
-    $batch = @"
+    # Escape double quotes and special characters for CMD
+    $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psCommand))
+
+    $debloatBatch = @"
 @echo off
 title  THE ONE Debloater
 echo.
@@ -372,13 +375,14 @@ echo              T H E   O N E   D E B L O A T E R
 echo   --------------------------------------------------------
 echo.
 echo   Removing pre-installed bloatware...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$psCommand"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand
 echo.
 echo   --------------------------------------------------------
 echo    Process finished. This window will close in 10 seconds.
 echo    Press any key to return to main menu.
 echo   --------------------------------------------------------
 echo.
+
 choice /c 0 /t 10 /d 0 /n >nul
 if errorlevel 2 goto :stay
 echo timeout > "$flagFile"
@@ -386,9 +390,11 @@ echo timeout > "$flagFile"
 exit /b
 "@
 
-    [System.IO.File]::WriteAllText($tempRun, $batch, [System.Text.Encoding]::ASCII)
+    $debloatBatch = $debloatBatch -replace '\$flagFile', $flagFile
+    $tempBatch = "$env:TEMP\THE_ONE_DEBLOAT.cmd"
+    [System.IO.File]::WriteAllText($tempBatch, $debloatBatch, [System.Text.Encoding]::ASCII)
 
-    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
+    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempBatch`"" -PassThru
     $proc.WaitForExit()
 
     if (Test-Path $flagFile) {
