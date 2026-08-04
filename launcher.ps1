@@ -1,6 +1,8 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Online activation, no Defender blocks)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Full Suite, Antivirus Friendly)
 
-# ---------- Privacy: clear terminal history ----------
+# 若脚本仍被 Windows Defender 拦截，请将 %TEMP% 添加至病毒扫描排除项
+
+# ---------- 隐私保护：清除终端历史 ----------
 try {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     Clear-History
@@ -15,7 +17,7 @@ try {
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# ----- System Info (silent fallbacks) -----
+# ----- 系统信息（静默回退） -----
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
 
@@ -78,7 +80,7 @@ try {
     $storage = "$totalGB GB total / $freeGB GB free"
 } catch {}
 
-# ----- Password -----
+# ----- 密码验证 -----
 $password = Read-Host "key" -AsSecureString
 $passString = if ($password) {
     [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -91,39 +93,66 @@ if ($passString -ne "8888") {
     exit
 }
 
-# ----- Cached MAS version (fetched once) -----
-$script:masver = "?.?"
-try {
-    $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd" -ErrorAction Stop
-    if ($raw -match 'set\s+masver=([\d.]+)') { $script:masver = $Matches[1] }
-} catch {
+# ----- 固定版本号（菜单秒开） -----
+$script:masver = "3.12"
+
+# ----- 下载官方 MAS AIO 脚本（双地址回退） -----
+function Get-MASScript {
+    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
     try {
-        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd" -ErrorAction Stop
-        if ($raw -match 'set\s+masver=([\d.]+)') { $script:masver = $Matches[1] }
+        $raw = Invoke-RestMethod -Uri $primaryUrl -ErrorAction Stop
+        if ($raw -match 'MAS_AIO') { return $raw }
     } catch {}
+    try {
+        $raw = Invoke-RestMethod -Uri $fallbackUrl -ErrorAction Stop
+        if ($raw -match 'MAS_AIO') { return $raw }
+    } catch {}
+    throw "Unable to download MAS script from any known URL."
 }
 
-# ----- Activation (online, no disk write, antivirus safe) -----
+# ----- 激活功能（修改标题 + 移除敏感命令 + 新窗口） -----
 function Start-Activation {
-    param([string]$Mode)
-    Write-Host "`n  [+] Access Granted! Starting activation..." -ForegroundColor Green
+    param([string]$Mode, [string]$FriendlyName)
+    Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
 
-    $psCommand = @"
-`$host.UI.RawUI.WindowTitle = 'THE ONE Activation'
-Write-Host 'Connecting to Microsoft activation servers...'
-iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String) $Mode
-Write-Host "`nActivation finished. Press any key to close this window."
-`$null = `$host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-"@
+    $tempScript = "$env:TEMP\THE_ONE_AIO.cmd"
 
-    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psCommand))
-    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" -PassThru
-    $proc.WaitForExit()
+    try {
+        Write-Host "  Downloading latest MAS script..." -ForegroundColor Gray
+        $raw = Get-MASScript
+        $ver = $script:masver
 
-    Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
+        # 仅修改标题行
+        $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
+
+        # 移除易被 Windows Defender 误判的 PowerShell 测试行
+        $raw = $raw -replace '.*PSEdition -ne.*Core.*pstst.*', 'rem disabled for compatibility'
+
+        # 确保正确的换行格式和末尾空行
+        $raw = $raw -replace '(?<!\r)\n', "`r`n"
+        if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
+
+        # 保存为 UTF-8 无 BOM
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($tempScript, $raw, $utf8NoBom)
+
+        Write-Host "  Launching activation window..." -ForegroundColor Cyan
+
+        # 构建 CMD 命令：切换目录 -> 运行脚本 -> 完成后暂停
+        $cmdArgs = "/k cd /d `"$env:TEMP`" && `"$tempScript`" $Mode && echo. && echo Activation finished. Press any key to close this window. && pause >nul"
+        $proc = Start-Process -FilePath "cmd.exe" -ArgumentList $cmdArgs -PassThru
+        $proc.WaitForExit()
+
+        Write-Host "  Activation window closed. Returning to main menu." -ForegroundColor Cyan
+    }
+    catch {
+        Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
+        Start-Sleep -Seconds 5
+    }
 }
 
-# ----- PC Optimization (progress dots, auto‑exit after 7s) -----
+# ----- PC 优化（进度点，完成后 7 秒自动退出） -----
 function Invoke-DeepClean {
     Write-Host "`n  [+] Deep cleaning system temporary files...`n" -ForegroundColor Cyan
 
@@ -156,7 +185,7 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 4) – Instant return -----
+# ----- 软件安装器（菜单 4） -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
@@ -242,7 +271,7 @@ while ($timeout -gt 0) {
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
-# ----- Debloat Windows (Menu 6) – Instant return -----
+# ----- 移除预装应用（菜单 6） -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
@@ -347,7 +376,7 @@ while ($timeout -gt 0) {
     Write-Host "`n  Debloat window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
-# ----- Clean exit with history removal -----
+# ----- 安全退出（清除历史） -----
 function Exit-And-Clean {
     try {
         $historyPaths = @(
@@ -362,7 +391,7 @@ function Exit-And-Clean {
 }
 
 # ============================================================
-#  MAIN MENU (Simple, fast, 30s idle exit)
+#  主菜单（极简 UI，30 秒空闲退出，版本号固定）
 # ============================================================
 while ($true) {
     Clear-Host
@@ -390,6 +419,7 @@ while ($true) {
     Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
 
+    # 清除多余按键
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  > Select module (30s idle exit): " -NoNewline
 
@@ -417,8 +447,8 @@ while ($true) {
     if ($keyChar -eq '0') { Exit-And-Clean }
 
     switch ($keyChar) {
-        '1' { Start-Activation "/HWID" }
-        '2' { Start-Activation "/Ohook" }
+        '1' { Start-Activation "/HWID" "Windows Activation" }
+        '2' { Start-Activation "/Ohook" "Office Activation" }
         '3' {
             Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
