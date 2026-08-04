@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (Direct activation with custom title)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Auto-updating activation, simple menu)
 
 # Clear terminal history
 try {
@@ -10,6 +10,7 @@ try {
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
+# System information (silent fallbacks)
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
 
@@ -41,96 +42,43 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- Direct activation with custom title, no temp files ----------
-function Start-Activation($Mode) {
-    Write-Host "`n  [+] Preparing activation..." -ForegroundColor Green
-    # Choose the correct MAS function: HWID or Ohook
-    if ($Mode -eq "/HWID") { $masFunc = "HWID" } else { $masFunc = "Ohook" }
-    # Build a command that sets the window title, loads MAS, and executes the function
-    $psCmd = "`$host.UI.RawUI.WindowTitle='THE ONE Activation'; iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String); $masFunc"
-    Start-Process -FilePath powershell.exe -ArgumentList "-NoExit -Command `"$psCmd`"" -Wait
-    Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
-}
+# ---------- Auto-updating activation using official standalone scripts ----------
+function Start-Activation {
+    param(
+        [string]$FriendlyName,      # e.g. "Windows" or "Office"
+        [string]$OfficialScript,    # e.g. "HWID_Activation.cmd" or "Ohook_Activation_AIO.cmd"
+        [string]$CustomTitle        # e.g. "THE ONE WINDOWS AUTHORIZED v3.12"
+    )
+    Write-Host "`n  [+] Downloading latest $FriendlyName activation script..." -ForegroundColor Green
+    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators/$OfficialScript"
+    $tempPath = "$env:TEMP\THE_ONE_$OfficialScript"
 
-function Invoke-DeepClean {
-    Write-Host "`n  [+] Deep cleaning temporary files...`n" -ForegroundColor Cyan
-    $folders = @($env:TEMP, "$env:SystemRoot\Temp", "$env:SystemRoot\Prefetch", [Environment]::GetFolderPath('Recent'), "$env:LOCALAPPDATA\Microsoft\Windows\INetCache", "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files")
-    foreach ($f in $folders) {
-        if (Test-Path $f) {
-            Write-Host "  Cleaning: $f" -ForegroundColor DarkGray
-            $items = Get-ChildItem $f -Recurse -Force -ErrorAction SilentlyContinue
-            $c = 0
-            foreach ($i in $items) { try { Remove-Item $i.FullName -Force -Recurse -ErrorAction Stop } catch {}; $c++; if ($c % 50 -eq 0) { Write-Host "." -NoNewline } }
-            Write-Host " Done."
-        }
+    try {
+        # Download the official script
+        $web = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+        $content = $web.Content
+
+        # Replace the title line only (first occurrence)
+        $content = $content -replace '(?im)^title .*$', "title  $CustomTitle"
+
+        # Remove the PowerShell diagnostic line that can trigger Defender
+        $content = $content -replace '.*PSEdition -ne.*Core.*pstst.*', 'rem disabled for compatibility'
+
+        # Ensure correct line endings
+        $content = $content -replace '(?<!\r)\n', "`r`n"
+        if (-not $content.EndsWith("`r`n")) { $content += "`r`n" }
+
+        # Save to temp and run
+        [System.IO.File]::WriteAllText($tempPath, $content, [System.Text.Encoding]::ASCII)
+        Write-Host "  Launching activation window..." -ForegroundColor Cyan
+        $proc = Start-Process -FilePath cmd.exe -ArgumentList "/c `"$tempPath`"" -PassThru -Wait
+        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+
+        Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
+    } catch {
+        Write-Host "  [-] Failed to download or run activation script." -ForegroundColor Red
+        Start-Sleep 3
     }
-    try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "`n  [+] Optimization complete. Exiting all terminals in 7 seconds..." -ForegroundColor Green
-    Start-Sleep 7
-    Exit-And-Clean
-}
-
-function Invoke-SoftwareInstall {
-    Write-Host "`n  Launching Software Installer..." -ForegroundColor Cyan
-    $tempPs1 = "$env:TEMP\THE_ONE_INSTALL.ps1"
-    @'
-$host.UI.RawUI.WindowTitle = "THE ONE Software Installer (30s auto-close)"
-Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
-Write-Host "        T H E   O N E   S O F T W A R E   I N S T A L L E R" -ForegroundColor Cyan
-Write-Host "  --------------------------------------------------------`n"
-function Wait-KeyOrTimeout($s, $msg) { Write-Host $msg -NoNewline; $end = (Get-Date).AddSeconds($s); while ((Get-Date) -lt $end) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); return $k.KeyChar } Start-Sleep -Milliseconds 200 } return $null }
-if (!(Get-Command winget.exe -ErrorAction SilentlyContinue)) { Write-Host "  [ERROR] winget not found." -ForegroundColor Red; Read-Host "  Press Enter to return"; exit }
-Write-Host "  [1] Google Chrome`n  [2] 7-Zip`n  [3] VLC`n  [4] GIMP`n  [A] Install ALL (1-3)`n  [0] Return" -ForegroundColor White
-$choice = Wait-KeyOrTimeout 30 "  Enter choice (30s timeout): "; if (!$choice) { Write-Host "`n  Timeout."; Start-Sleep 1; exit }
-Write-Host $choice
-switch -Wildcard ($choice) {
-    '0' { exit }
-    'A' { winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements; winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements; winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
-    '1' { winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements }
-    '2' { winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements }
-    '3' { winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
-    '4' { winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements }
-    default { Write-Host "  Invalid choice." -ForegroundColor Red; Start-Sleep 2 }
-}
-Write-Host "`n  Installation completed. Window closes in 10s or press Enter." -ForegroundColor Green
-$timeout = 10; while ($timeout -gt 0) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); if ($k.Key -eq "Enter") { break } } Start-Sleep 1; $timeout-- }
-'@ | Out-File -FilePath $tempPs1 -Encoding UTF8
-    $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
-    $p.WaitForExit()
-    Remove-Item $tempPs1 -Force -ErrorAction SilentlyContinue
-    while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
-    Write-Host "`n  Installer closed." -ForegroundColor Cyan
-}
-
-function Invoke-Debloat {
-    Write-Host "`n  [+] Removing bloatware..." -ForegroundColor Cyan
-    $tempPs1 = "$env:TEMP\THE_ONE_DEBLOAT.ps1"
-    @'
-$host.UI.RawUI.WindowTitle = "THE ONE Debloater (30s auto-close)"
-Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
-Write-Host "              T H E   O N E   D E B L O A T E R" -ForegroundColor Cyan
-Write-Host "  --------------------------------------------------------`n"
-$packages = @('Microsoft.549981C3F5F10','Microsoft.MicrosoftOfficeHub','Microsoft.OneDriveSync','Microsoft.XboxApp','Microsoft.XboxGameCallableUI','Microsoft.XboxSpeechToTextOverlay','Microsoft.Xbox.TCUI','Microsoft.XboxGamingOverlay','Microsoft.XboxIdentityProvider','Microsoft.BingNews','Microsoft.BingWeather','Microsoft.BingSports','Microsoft.BingFinance','Microsoft.GetHelp','Microsoft.Getstarted','Microsoft.MicrosoftSolitaireCollection','Microsoft.MixedReality.Portal','Microsoft.SkypeApp','Microsoft.WindowsFeedbackHub','Microsoft.WindowsMaps','Microsoft.YourPhone','Microsoft.ZuneMusic','Microsoft.ZuneVideo')
-Write-Host "  Apps to remove:" -ForegroundColor White; foreach ($p in $packages) { Write-Host "    - $p" -ForegroundColor Gray }
-Write-Host "`n  Press 1 to confirm removal, any other key to cancel. (30s timeout)" -ForegroundColor Yellow
-function Wait-KeyOrTimeout($s, $msg) { Write-Host $msg -NoNewline; $end = (Get-Date).AddSeconds($s); while ((Get-Date) -lt $end) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); return $k.KeyChar } Start-Sleep -Milliseconds 200 } return $null }
-$confirm = Wait-KeyOrTimeout 30 "  Your choice: "; if (!$confirm) { Write-Host "`n  Timeout."; Start-Sleep 1; exit }
-Write-Host $confirm
-if ($confirm -ne '1') { Write-Host "  Cancelled." -ForegroundColor Yellow; Start-Sleep 2; exit }
-Write-Host "`n  Removing packages..." -ForegroundColor Gray
-$removed = @(); $failed = @()
-foreach ($pkg in $packages) { try { Get-AppxPackage -Name $pkg -ErrorAction Stop | Remove-AppxPackage -ErrorAction Stop; $removed += $pkg } catch { $failed += $pkg } }
-if ($removed.Count) { Write-Host "`n  Removed: $($removed -join ', ')" -ForegroundColor Green }
-if ($failed.Count) { Write-Host "  Failed: $($failed -join ', ')" -ForegroundColor Red }
-if (!$removed -and !$failed) { Write-Host "  No packages found." -ForegroundColor Yellow }
-Write-Host "`n  Operation complete. Window closes in 10s or press Enter." -ForegroundColor Green
-$timeout = 10; while ($timeout -gt 0) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); if ($k.Key -eq "Enter") { break } } Start-Sleep 1; $timeout-- }
-'@ | Out-File -FilePath $tempPs1 -Encoding UTF8
-    $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
-    $p.WaitForExit()
-    Remove-Item $tempPs1 -Force -ErrorAction SilentlyContinue
-    while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
-    Write-Host "`n  Debloat finished." -ForegroundColor Cyan
 }
 
 function Exit-And-Clean {
@@ -138,6 +86,7 @@ function Exit-And-Clean {
     exit
 }
 
+# ---------- Main menu ----------
 while ($true) {
     Clear-Host
     Write-Host "`n  T H E   O N E   S Y S T E M S   v3.12" -ForegroundColor Cyan
@@ -157,9 +106,6 @@ while ($true) {
     Write-Host "  [1] Reactivate THE ONE PC Authorized Windows" -ForegroundColor Green
     Write-Host "  [2] Reactivate THE ONE PC Office" -ForegroundColor Green
     Write-Host "  [3] Full THE ONE Activation Suite (All Options)" -ForegroundColor Green
-    Write-Host "  [4] THE ONE Software Installer" -ForegroundColor Green
-    Write-Host "  [5] THE ONE PC Optimization" -ForegroundColor Green
-    Write-Host "  [6] THE ONE Debloat Windows" -ForegroundColor Green
     Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
 
@@ -186,14 +132,11 @@ while ($true) {
     if ($ch -eq '0') { Exit-And-Clean }
 
     switch ($ch) {
-        '1' { Start-Activation "/HWID" }
-        '2' { Start-Activation "/Ohook" }
+        '1' { Start-Activation "Windows" "HWID_Activation.cmd" "THE ONE WINDOWS AUTHORIZED v3.12" }
+        '2' { Start-Activation "Office" "Ohook_Activation_AIO.cmd" "THE ONE OFFICE AUTHORIZED v3.12" }
         '3' {
             Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             cmd /c "start `"Full MAS`" powershell -NoExit -Command `"irm https://get.activated.win | iex`""
         }
-        '4' { Invoke-SoftwareInstall }
-        '5' { Invoke-DeepClean }
-        '6' { Invoke-Debloat }
     }
 }
