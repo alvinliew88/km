@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable Release: Fixed version, software installer, debloater)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: Fixed version, PDF24 install, all fallbacks)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -120,7 +120,6 @@ function Start-Activation {
 
     try {
         $raw = Get-MASScript
-        # Fixed version extraction: match set masver=... anywhere
         $ver = '?.?'
         if ($raw -match 'set\s+masver=([\d.]+)') { $ver = $Matches[1] }
 
@@ -131,7 +130,6 @@ function Start-Activation {
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-        # Wrapper script that runs activation and then waits
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -207,13 +205,12 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – Stable: uses PowerShell window, never flashes -----
+# ----- Software Installer (Menu 5) – Fixed PDF24, robust fallbacks -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
     $tempPs1 = "$env:TEMP\THE_ONE_INSTALL.ps1"
 
-    # Create a self-contained PowerShell script that will run in a new window
     $installerScript = @'
 $host.UI.RawUI.WindowTitle = "THE ONE Software Installer"
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
@@ -239,18 +236,34 @@ Write-Host "  │  [0] Return to Main Menu                    │"
 Write-Host "  └─────────────────────────────────────────────┘`n"
 $choice = Read-Host "  Enter your choice"
 
+function Install-PDF24 {
+    Write-Host "  Attempting to install PDF24..." -ForegroundColor Yellow
+    # Try multiple winget IDs
+    winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -eq 0) { return }
+    winget install --id geeksoftware.PDF24 --silent --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -eq 0) { return }
+    # Fallback to direct download of official silent installer
+    Write-Host "  winget failed, downloading official installer..." -ForegroundColor Gray
+    $url = "https://tools.pdf24.org/en/creator"
+    $tempSetup = "$env:TEMP\pdf24-setup.exe"
+    Invoke-WebRequest -Uri $url -OutFile $tempSetup -ErrorAction Stop
+    Start-Process -FilePath $tempSetup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
+    Remove-Item $tempSetup -Force -ErrorAction SilentlyContinue
+}
+
 switch -Wildcard ($choice.ToUpper()) {
     '0' { exit }
     'A' {
         winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements
         winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements
-        winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements
+        Install-PDF24
         winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements
         winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements
     }
     '1' { winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements }
     '2' { winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements }
-    '3' { winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements }
+    '3' { Install-PDF24 }
     '4' { winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements }
     '5' { winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
     default { Write-Host "  Invalid choice." -ForegroundColor Red; Start-Sleep 2 }
@@ -276,7 +289,7 @@ while ($timeout -gt 0) {
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
-# ----- Debloat Windows (Menu 6) – Stable: uses PowerShell window, never flashes -----
+# ----- Debloat Windows (Menu 6) – Stable -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
@@ -360,12 +373,17 @@ function Exit-And-Clean {
     exit
 }
 
-# ----- Get MAS version for display -----
+# ----- Get MAS version with fallback (fixes v?.?) -----
 function Get-MASVersion {
-    try {
-        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd" -ErrorAction Stop
-        if ($raw -match 'set\s+masver=([\d.]+)') { return $Matches[1] }
-    } catch {}
+    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
+    $urls = @($primaryUrl, $fallbackUrl)
+    foreach ($url in $urls) {
+        try {
+            $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
+            if ($raw -match 'set\s+masver=([\d.]+)') { return $Matches[1] }
+        } catch {}
+    }
     return "?.?"
 }
 
