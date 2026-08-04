@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: PDF24 direct download, debloat confirmation, version fix)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Box UI, 30s idle, Chrome PDF, ALL without GIMP)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -109,7 +109,7 @@ function Get-MASScript {
     throw "Unable to download MAS script from any known URL."
 }
 
-# ----- Activation (keeps window open, 7-sec timeout) -----
+# ----- Activation (keeps window open, 7-sec timeout, ESC to exit) -----
 function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
@@ -130,6 +130,7 @@ function Start-Activation {
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
+        # Wrapper script with both key-press and ESC detection
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -141,16 +142,18 @@ echo.
 call "$tempAIO" $Mode
 echo.
 echo   --------------------------------------------------------
-echo    Press any key within 7 seconds to return to main menu.
-echo    Otherwise ALL TERMINALS WILL BE CLOSED.
+echo    Press any key to return to main menu, or ESC to exit all.
 echo   --------------------------------------------------------
 echo.
 
-choice /c 0 /t 7 /d 0 /n >nul
-if errorlevel 2 goto :stay
-echo timeout > "$flagFile"
-:stay
-exit
+:waitloop
+choice /c 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ /t 7 /d 0 /n >nul
+if errorlevel 1 goto :keypressed
+:keypressed
+if "%errorlevel%"=="0" echo timeout > "$flagFile" & exit /b
+if "%errorlevel%"=="27" exit
+rem any other key returns to menu
+exit /b
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
@@ -163,7 +166,7 @@ exit
             Start-Sleep -Seconds 1
             Exit-And-Clean
         } else {
-            Write-Host "`n  [+] User pressed a key. Returning to main menu." -ForegroundColor Cyan
+            Write-Host "`n  [+] Returning to main menu." -ForegroundColor Cyan
         }
     }
     catch {
@@ -205,17 +208,31 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – PDF24 direct download with verification -----
+# ----- Software Installer (Menu 5) – PDF removed, GIMP not in ALL, idle timeout -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
     $tempPs1 = "$env:TEMP\THE_ONE_INSTALL.ps1"
 
     $installerScript = @'
-$host.UI.RawUI.WindowTitle = "THE ONE Software Installer"
+$host.UI.RawUI.WindowTitle = "THE ONE Software Installer (Auto-close in 30s)"
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "        T H E   O N E   S O F T W A R E   I N S T A L L E R" -ForegroundColor Cyan
 Write-Host "  --------------------------------------------------------`n"
+
+function Wait-KeyOrTimeout($seconds, $message) {
+    Write-Host $message -NoNewline
+    $end = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $end) {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            return $key.KeyChar
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    return $null
+}
+
 $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
 if (-not $winget) {
     Write-Host "  [ERROR] Windows Package Manager (winget) not found." -ForegroundColor Red
@@ -227,66 +244,32 @@ if (-not $winget) {
 Write-Host "  Available software:" -ForegroundColor White
 Write-Host "  ┌─────────────────────────────────────────────┐"
 Write-Host "  │  [1] Google Chrome                          │"
-Write-Host "  │  [2] GIMP (Image Editor)                    │"
-Write-Host "  │  [3] PDF24 (PDF Tool)                       │"
-Write-Host "  │  [4] 7-Zip (Archive Utility)                │"
-Write-Host "  │  [5] VLC Media Player                       │"
-Write-Host "  │  [A] Install ALL                            │"
+Write-Host "  │  [2] 7-Zip (Archive Utility)                │"
+Write-Host "  │  [3] VLC Media Player                       │"
+Write-Host "  │  [4] GIMP (Image Editor)                    │"
+Write-Host "  │  [A] Install ALL (Chrome + 7-Zip + VLC)     │"
 Write-Host "  │  [0] Return to Main Menu                    │"
 Write-Host "  └─────────────────────────────────────────────┘`n"
-$choice = Read-Host "  Enter your choice"
 
-function Install-PDF24 {
-    Write-Host "  Attempting to install PDF24..." -ForegroundColor Yellow
-    # Try multiple winget IDs plus a generic search
-    $ids = @("PDF24.PDF24", "PDF24.Creator", "geeksoftware.PDF24.Creator")
-    $installed = $false
-    foreach ($id in $ids) {
-        winget install --id $id --silent --accept-source-agreements --accept-package-agreements
-        if ($LASTEXITCODE -eq 0) { $installed = $true; Write-Host "  Successfully installed via winget ID: $id" -ForegroundColor Green; break }
-    }
-    if (-not $installed) {
-        Write-Host "  winget IDs failed, trying generic search..." -ForegroundColor Gray
-        winget install PDF24 --silent --accept-source-agreements --accept-package-agreements
-        if ($LASTEXITCODE -eq 0) { $installed = $true; Write-Host "  Successfully installed via winget search." -ForegroundColor Green }
-    }
-    if (-not $installed) {
-        Write-Host "  winget failed, downloading offline installer directly..." -ForegroundColor Gray
-        $url = "https://download.pdf24.org/pdf24-creator-setup.exe"
-        $tempSetup = "$env:TEMP\pdf24-setup.exe"
-        try {
-            Invoke-WebRequest -Uri $url -OutFile $tempSetup -ErrorAction Stop -UseBasicParsing
-            if ((Get-Item $tempSetup).Length -gt 1MB) {
-                Write-Host "  Download successful, running installer..." -ForegroundColor Green
-                Start-Process -FilePath $tempSetup -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART" -Wait
-                Write-Host "  PDF24 installation completed." -ForegroundColor Green
-            } else {
-                throw "Downloaded file is too small, likely corrupt."
-            }
-        } catch {
-            Write-Host "  Direct download failed: $_" -ForegroundColor Red
-            Write-Host "  Opening official download page as last resort..." -ForegroundColor Yellow
-            Start-Process "https://tools.pdf24.org/en/creator"
-        } finally {
-            Remove-Item $tempSetup -Force -ErrorAction SilentlyContinue
-        }
-    }
+$choice = Wait-KeyOrTimeout 30 "  Enter your choice (30s timeout): "
+if ($null -eq $choice) {
+    Write-Host "`n  Timeout reached. Exiting..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 1
+    exit
 }
+Write-Host $choice
 
-switch -Wildcard ($choice.ToUpper()) {
+switch -Wildcard ($choice) {
     '0' { exit }
     'A' {
         winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements
-        winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements
-        Install-PDF24
         winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements
         winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements
     }
     '1' { winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements }
-    '2' { winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements }
-    '3' { Install-PDF24 }
-    '4' { winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements }
-    '5' { winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
+    '2' { winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements }
+    '3' { winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
+    '4' { winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements }
     default { Write-Host "  Invalid choice." -ForegroundColor Red; Start-Sleep 2 }
 }
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
@@ -310,14 +293,14 @@ while ($timeout -gt 0) {
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
-# ----- Debloat Windows (Menu 6) – Confirmation, list apps, stable return -----
+# ----- Debloat Windows (Menu 6) – Confirmation with timeout -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
     $tempPs1 = "$env:TEMP\THE_ONE_DEBLOAT.ps1"
 
     $debloatScript = @'
-$host.UI.RawUI.WindowTitle = "THE ONE Debloater"
+$host.UI.RawUI.WindowTitle = "THE ONE Debloater (Auto-close in 30s)"
 Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
 Write-Host "              T H E   O N E   D E B L O A T E R" -ForegroundColor Cyan
 Write-Host "  --------------------------------------------------------`n"
@@ -350,8 +333,29 @@ Write-Host "  The following apps will be removed:" -ForegroundColor White
 foreach ($p in $packages) {
     Write-Host "    - $p" -ForegroundColor Gray
 }
-Write-Host "`n  Press 1 to confirm removal, or any other key to cancel." -ForegroundColor Yellow
-$confirm = Read-Host "  Your choice"
+Write-Host "`n  Press 1 to confirm removal, or any other key to cancel. (30s timeout)" -ForegroundColor Yellow
+
+function Wait-KeyOrTimeout($seconds, $message) {
+    Write-Host $message -NoNewline
+    $end = (Get-Date).AddSeconds($seconds)
+    while ((Get-Date) -lt $end) {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            return $key.KeyChar
+        }
+        Start-Sleep -Milliseconds 200
+    }
+    return $null
+}
+
+$confirm = Wait-KeyOrTimeout 30 "  Your choice: "
+if ($null -eq $confirm) {
+    Write-Host "`n  Timeout reached. Exiting..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 1
+    exit
+}
+Write-Host $confirm
+
 if ($confirm -ne '1') {
     Write-Host "  Removal cancelled." -ForegroundColor Yellow
     Start-Sleep -Seconds 2
@@ -421,44 +425,61 @@ function Get-MASVersion {
 }
 
 # ============================================================
-#  MAIN MENU (Modern Clean UI)
+#  MAIN MENU (Box UI, 30-sec idle exit)
 # ============================================================
 while ($true) {
     $masver = Get-MASVersion
     Clear-Host
 
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v$masver" -ForegroundColor Cyan
-    Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
-    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
+    Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor DarkCyan
+    Write-Host "  ║        T H E   O N E   S Y S T E M S   v$masver          ║" -ForegroundColor Cyan
+    Write-Host "  ║         Authorized Operations Terminal                   ║" -ForegroundColor DarkGray
+    Write-Host "  ╠══════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
+    Write-Host "  ║  PC Name      : $($pcName.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  User Account : $($userName.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  Brand        : $($brand.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  MAC Address  : $($macAddress.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  Local IP     : $($localIp.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  Windows      : $($windowsVersion.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  Install Date : $($installDate.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  Processor    : $($processor.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  RAM          : $($ram.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ║  Storage (C:) : $($storage.PadRight(35))   ║" -ForegroundColor White
+    Write-Host "  ╠══════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
+    Write-Host "  ║  [1] Reactivate THE ONE PC Authorized Windows           ║" -ForegroundColor Green
+    Write-Host "  ║  [2] Reactivate THE ONE PC Office                       ║" -ForegroundColor Green
+    Write-Host "  ║  [3] THE ONE PC Optimization                            ║" -ForegroundColor Green
+    Write-Host "  ║  [4] Full THE ONE Activation Suite (All Options)        ║" -ForegroundColor Green
+    Write-Host "  ║  [5] THE ONE Software Installer                         ║" -ForegroundColor Green
+    Write-Host "  ║  [6] THE ONE Debloat Windows                            ║" -ForegroundColor Green
+    Write-Host "  ║  [0] Exit Terminal                                      ║" -ForegroundColor DarkGray
+    Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
 
-    Write-Host "  PC Name      : $pcName" -ForegroundColor White
-    Write-Host "  User Account : $userName" -ForegroundColor White
-    Write-Host "  Brand        : $brand" -ForegroundColor White
-    Write-Host "  MAC Address  : $macAddress" -ForegroundColor White
-    Write-Host "  Local IP     : $localIp" -ForegroundColor White
-    Write-Host "  Windows      : $windowsVersion" -ForegroundColor White
-    Write-Host "  Install Date : $installDate" -ForegroundColor White
-    Write-Host "  Processor    : $processor" -ForegroundColor White
-    Write-Host "  RAM          : $ram" -ForegroundColor White
-    Write-Host "  Storage (C:) : $storage" -ForegroundColor White
+    # 30-second idle timeout
+    Write-Host "`n  > Select module (30s idle exit): " -NoNewline
+    $startTime = Get-Date
+    $timeoutSeconds = 30
+    $key = $null
+    while ($null -eq $key -and ((Get-Date) - $startTime).TotalSeconds -lt $timeoutSeconds) {
+        if ([Console]::KeyAvailable) {
+            $key = [Console]::ReadKey($true)
+            break
+        }
+        Start-Sleep -Milliseconds 200
+    }
 
-    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
-    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows" -ForegroundColor Green
-    Write-Host "  [2] Reactivate THE ONE PC Office" -ForegroundColor Green
-    Write-Host "  [3] THE ONE PC Optimization" -ForegroundColor Green
-    Write-Host "  [4] Full THE ONE Activation Suite (All Options)" -ForegroundColor Green
-    Write-Host "  [5] THE ONE Software Installer" -ForegroundColor Green
-    Write-Host "  [6] THE ONE Debloat Windows" -ForegroundColor Green
-    Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
-    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
+    if ($null -eq $key) {
+        Write-Host "`n  [!] No input detected for 30 seconds. Exiting..." -ForegroundColor Red
+        Start-Sleep -Seconds 2
+        Exit-And-Clean
+    }
 
-    Write-Host "`n  > Select module: " -NoNewline
-    $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-    Write-Host "$key" -ForegroundColor White
+    $keyChar = $key.KeyChar
+    Write-Host $keyChar -ForegroundColor White
 
-    if ($key -eq '0') { Exit-And-Clean }
+    if ($keyChar -eq '0') { Exit-And-Clean }
 
-    switch ($key) {
+    switch ($keyChar) {
         '1' { Start-Activation "/HWID" "Windows Activation" }
         '2' { Start-Activation "/Ohook" "Office Activation" }
         '3' { Invoke-DeepClean }
