@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Key buffer clear, aligned box, stable)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Instant menu response, cached version)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -94,6 +94,19 @@ if ($passString -ne "8888") {
     exit
 }
 
+# ----- Cached MAS version (fetched once) -----
+$script:masver = "?.?"
+try {
+    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
+    $raw = $null
+    try { $raw = Invoke-RestMethod -Uri $primaryUrl -ErrorAction Stop } catch {}
+    if (-not $raw) { try { $raw = Invoke-RestMethod -Uri $fallbackUrl -ErrorAction Stop } catch {} }
+    if ($raw -and ($raw -match 'set\s+masver=([\d.]+)')) {
+        $script:masver = $Matches[1]
+    }
+} catch {}
+
 # ----- Download MAS AIO with correct primary URL and fallback -----
 function Get-MASScript {
     $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
@@ -122,9 +135,7 @@ function Start-Activation {
 
     try {
         $raw = Get-MASScript
-        $ver = '?.?'
-        if ($raw -match 'set\s+masver=([\d.]+)') { $ver = $Matches[1] }
-
+        $ver = $script:masver
         $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
         $raw = $raw -replace '(?<!\r)\n', "`r`n"
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
@@ -207,7 +218,7 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – PDF removed, GIMP not in ALL, idle timeout -----
+# ----- Software Installer (Menu 5) – Instant return, no delay -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
@@ -289,13 +300,12 @@ while ($timeout -gt 0) {
     $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $proc.WaitForExit()
 
-    # Clear any stray key presses accumulated while sub-window was open
+    # No extra delay, just clear keys and return
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
-    Start-Sleep -Milliseconds 300
 }
 
-# ----- Debloat Windows (Menu 6) – Confirmation with timeout -----
+# ----- Debloat Windows (Menu 6) – Instant return, no delay -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
@@ -364,6 +374,7 @@ if ($confirm -ne '1') {
     exit
 }
 
+Write-Host "`n  Removing packages..." -ForegroundColor Gray
 $removed = @()
 $failed  = @()
 foreach ($pkg in $packages) {
@@ -395,10 +406,8 @@ while ($timeout -gt 0) {
     $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $proc.WaitForExit()
 
-    # Clear any stray keys
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  Debloat window closed. Returning to main menu." -ForegroundColor Cyan
-    Start-Sleep -Milliseconds 300
 }
 
 # ----- Clean exit with history removal -----
@@ -415,29 +424,14 @@ function Exit-And-Clean {
     exit
 }
 
-# ----- Get MAS version with fallback (fixes v?.?) -----
-function Get-MASVersion {
-    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
-    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
-    $urls = @($primaryUrl, $fallbackUrl)
-    foreach ($url in $urls) {
-        try {
-            $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
-            if ($raw -match 'set\s+masver=([\d.]+)') { return $Matches[1] }
-        } catch {}
-    }
-    return "?.?"
-}
-
 # ============================================================
-#  MAIN MENU (Box UI, 30-sec idle exit, key buffer cleared)
+#  MAIN MENU (Box UI, 30-sec idle exit, instant response)
 # ============================================================
 while ($true) {
-    $masver = Get-MASVersion
     Clear-Host
 
     Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor DarkCyan
-    Write-Host "  ║        T H E   O N E   S Y S T E M S   v$masver          ║" -ForegroundColor Cyan
+    Write-Host "  ║        T H E   O N E   S Y S T E M S   v$script:masver          ║" -ForegroundColor Cyan
     Write-Host "  ║         Authorized Operations Terminal                   ║" -ForegroundColor DarkGray
     Write-Host "  ╠══════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
     Write-Host "  ║  PC Name      : $($pcName.PadRight(35))   ║" -ForegroundColor White
@@ -460,7 +454,7 @@ while ($true) {
     Write-Host "  ║  [0] Exit Terminal                                      ║" -ForegroundColor DarkGray
     Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
 
-    # Clear any leftover keystrokes before waiting
+    # Clear stray keys before waiting
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
 
     Write-Host "`n  > Select module (30s idle exit): " -NoNewline
