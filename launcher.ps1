@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: PDF24 fix via multiple winget IDs + web fallback)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Stable: GIMP included, PDF24 multi-ID, version fix)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -205,7 +205,7 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – PDF24 now uses multiple winget IDs + web fallback -----
+# ----- Software Installer (Menu 5) – GIMP included, PDF24 multi-ID + web fallback -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
@@ -238,7 +238,6 @@ $choice = Read-Host "  Enter your choice"
 
 function Install-PDF24 {
     Write-Host "  Attempting to install PDF24 via winget..." -ForegroundColor Yellow
-    # Try multiple known IDs
     $ids = @("PDF24.PDF24", "PDF24.Creator", "geeksoftware.PDF24.Creator")
     $installed = $false
     foreach ($id in $ids) {
