@@ -120,6 +120,7 @@ function Start-Activation {
 
     try {
         $raw = Get-MASScript
+        # Fixed version extraction: match set masver=... anywhere
         $ver = '?.?'
         if ($raw -match 'set\s+masver=([\d.]+)') { $ver = $Matches[1] }
 
@@ -206,124 +207,86 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – Fixed: interactive window stays open -----
+# ----- Software Installer (Menu 5) – Stable: uses PowerShell window, never flashes -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
-    $tempDir = $env:TEMP
-    $flagFile = "$tempDir\THE_ONE_EXIT.flag"
-    Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
+    $tempPs1 = "$env:TEMP\THE_ONE_INSTALL.ps1"
 
-    $installerBatch = @'
-@echo off
-setlocal EnableDelayedExpansion
-title  THE ONE Software Installer
-
-echo.
-echo   --------------------------------------------------------
-echo        T H E   O N E   S O F T W A R E   I N S T A L L E R
-echo   --------------------------------------------------------
-echo.
-
-where winget.exe >nul 2>&1
-if %errorlevel% neq 0 (
-    echo   [ERROR] Windows Package Manager (winget) not found.
-    echo   Please update your system or install App Installer from Microsoft Store.
-    echo.
-    echo   Press any key to return to main menu...
-    pause >nul
-    exit /b
-)
-
-echo   Available software:
-echo   ┌─────────────────────────────────────────────┐
-echo   │  [1] Google Chrome                          │
-echo   │  [2] GIMP (Image Editor)                    │
-echo   │  [3] PDF24 (PDF Tool)                       │
-echo   │  [4] 7-Zip (Archive Utility)                │
-echo   │  [5] VLC Media Player                       │
-echo   │  [A] Install ALL                            │
-echo   │  [0] Return to Main Menu                    │
-echo   └─────────────────────────────────────────────┘
-echo.
-
-set /p choice="  Enter your choice: "
-
-if /i "%choice%"=="0" goto :return_menu
-if /i "%choice%"=="A" goto :all
-
-set "PKG="
-if "%choice%"=="1" set "PKG=Google.Chrome"
-if "%choice%"=="2" set "PKG=GIMP.GIMP"
-if "%choice%"=="3" set "PKG=PDF24.PDF24"
-if "%choice%"=="4" set "PKG=7zip.7zip"
-if "%choice%"=="5" set "PKG=VideoLAN.VLC"
-if defined PKG goto :install_one
-
-echo   Invalid choice. Press any key to try again...
-pause >nul
-goto :eof
-
-:install_one
-echo.
-echo   Installing %PKG% ...
-winget install --id %PKG% --silent --accept-source-agreements --accept-package-agreements
-goto :done
-
-:all
-echo.
-echo   Installing all applications...
-winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements
-winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements
-winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements
-winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements
-winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements
-
-:done
-echo.
-echo   --------------------------------------------------------
-echo    Installation completed.
-echo    This window will close in 10 seconds, or press any key.
-echo   --------------------------------------------------------
-echo.
-choice /c 0 /t 10 /d 0 /n >nul
-if errorlevel 2 goto :stay
-echo timeout > "%flagFile%"
-:stay
-exit /b
-
-:return_menu
-echo Returning to main menu...
-timeout /t 2 >nul
-exit /b
-'@
-
-    $installerBatch = $installerBatch -replace '%flagFile%', $flagFile
-    $tempBatch = "$env:TEMP\THE_ONE_INSTALL.cmd"
-    [System.IO.File]::WriteAllText($tempBatch, $installerBatch, [System.Text.Encoding]::ASCII)
-
-    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempBatch`"" -PassThru
-    $proc.WaitForExit()
-
-    if (Test-Path $flagFile) {
-        Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
-        Write-Host "`n  [!] Installer window timed out. Exiting all terminals..." -ForegroundColor Red
-        Start-Sleep -Seconds 1
-        Exit-And-Clean
-    } else {
-        Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
-    }
+    # Create a self-contained PowerShell script that will run in a new window
+    $installerScript = @'
+$host.UI.RawUI.WindowTitle = "THE ONE Software Installer"
+Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "        T H E   O N E   S O F T W A R E   I N S T A L L E R" -ForegroundColor Cyan
+Write-Host "  --------------------------------------------------------`n"
+$winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+if (-not $winget) {
+    Write-Host "  [ERROR] Windows Package Manager (winget) not found." -ForegroundColor Red
+    Write-Host "  Please update your system or install App Installer from Microsoft Store.`n"
+    Read-Host "  Press Enter to return to main menu"
+    exit
 }
 
-# ----- Debloat Windows (Menu 6) – Fixed: execution stays open -----
+Write-Host "  Available software:" -ForegroundColor White
+Write-Host "  ┌─────────────────────────────────────────────┐"
+Write-Host "  │  [1] Google Chrome                          │"
+Write-Host "  │  [2] GIMP (Image Editor)                    │"
+Write-Host "  │  [3] PDF24 (PDF Tool)                       │"
+Write-Host "  │  [4] 7-Zip (Archive Utility)                │"
+Write-Host "  │  [5] VLC Media Player                       │"
+Write-Host "  │  [A] Install ALL                            │"
+Write-Host "  │  [0] Return to Main Menu                    │"
+Write-Host "  └─────────────────────────────────────────────┘`n"
+$choice = Read-Host "  Enter your choice"
+
+switch -Wildcard ($choice.ToUpper()) {
+    '0' { exit }
+    'A' {
+        winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements
+        winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements
+        winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements
+        winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements
+        winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements
+    }
+    '1' { winget install --id Google.Chrome --silent --accept-source-agreements --accept-package-agreements }
+    '2' { winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements }
+    '3' { winget install --id PDF24.PDF24 --silent --accept-source-agreements --accept-package-agreements }
+    '4' { winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements }
+    '5' { winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
+    default { Write-Host "  Invalid choice." -ForegroundColor Red; Start-Sleep 2 }
+}
+Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "  Installation completed. This window will close in 10 seconds, or press Enter." -ForegroundColor Green
+$timeout = 10
+while ($timeout -gt 0) {
+    if ([Console]::KeyAvailable) {
+        $key = [Console]::ReadKey($true)
+        if ($key.Key -eq "Enter") { break }
+    }
+    Start-Sleep -Seconds 1
+    $timeout--
+}
+'@
+
+    [System.IO.File]::WriteAllText($tempPs1, $installerScript, [System.Text.Encoding]::UTF8)
+
+    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
+    $proc.WaitForExit()
+
+    Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
+}
+
+# ----- Debloat Windows (Menu 6) – Stable: uses PowerShell window, never flashes -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
-    $tempDir = $env:TEMP
-    $flagFile = "$tempDir\THE_ONE_EXIT.flag"
-    Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
+    $tempPs1 = "$env:TEMP\THE_ONE_DEBLOAT.ps1"
 
-    $psCommand = @'
+    $debloatScript = @'
+$host.UI.RawUI.WindowTitle = "THE ONE Debloater"
+Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "              T H E   O N E   D E B L O A T E R" -ForegroundColor Cyan
+Write-Host "  --------------------------------------------------------`n"
 $packages = @(
     'Microsoft.549981C3F5F10',
     'Microsoft.MicrosoftOfficeHub',
@@ -359,52 +322,28 @@ foreach ($pkg in $packages) {
         $failed += $pkg
     }
 }
-if ($removed.Count -gt 0) { Write-Host "Removed: $($removed -join ', ')" }
-if ($failed.Count -gt 0) { Write-Host "Failed: $($failed -join ', ')" }
+if ($removed.Count -gt 0) { Write-Host "  Removed: $($removed -join ', ')" -ForegroundColor Green }
+if ($failed.Count -gt 0) { Write-Host "  Failed: $($failed -join ', ')" -ForegroundColor Red }
+if ($removed.Count -eq 0 -and $failed.Count -eq 0) { Write-Host "  No packages found to remove." -ForegroundColor Yellow }
+Write-Host "`n  --------------------------------------------------------" -ForegroundColor Cyan
+Write-Host "  Process finished. This window will close in 10 seconds, or press Enter." -ForegroundColor Green
+$timeout = 10
+while ($timeout -gt 0) {
+    if ([Console]::KeyAvailable) {
+        $key = [Console]::ReadKey($true)
+        if ($key.Key -eq "Enter") { break }
+    }
+    Start-Sleep -Seconds 1
+    $timeout--
+}
 '@
 
-    # Escape double quotes and special characters for CMD
-    $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psCommand))
+    [System.IO.File]::WriteAllText($tempPs1, $debloatScript, [System.Text.Encoding]::UTF8)
 
-    $debloatBatch = @"
-@echo off
-title  THE ONE Debloater
-echo.
-echo   --------------------------------------------------------
-echo              T H E   O N E   D E B L O A T E R
-echo   --------------------------------------------------------
-echo.
-echo   Removing pre-installed bloatware...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedCommand
-echo.
-echo   --------------------------------------------------------
-echo    Process finished. This window will close in 10 seconds.
-echo    Press any key to return to main menu.
-echo   --------------------------------------------------------
-echo.
-
-choice /c 0 /t 10 /d 0 /n >nul
-if errorlevel 2 goto :stay
-echo timeout > "$flagFile"
-:stay
-exit /b
-"@
-
-    $debloatBatch = $debloatBatch -replace '\$flagFile', $flagFile
-    $tempBatch = "$env:TEMP\THE_ONE_DEBLOAT.cmd"
-    [System.IO.File]::WriteAllText($tempBatch, $debloatBatch, [System.Text.Encoding]::ASCII)
-
-    $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempBatch`"" -PassThru
+    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $proc.WaitForExit()
 
-    if (Test-Path $flagFile) {
-        Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
-        Write-Host "`n  [!] Debloat window timed out. Exiting all terminals..." -ForegroundColor Red
-        Start-Sleep -Seconds 1
-        Exit-And-Clean
-    } else {
-        Write-Host "`n  Debloat window closed. Returning to main menu." -ForegroundColor Cyan
-    }
+    Write-Host "`n  Debloat window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
 # ----- Clean exit with history removal -----
