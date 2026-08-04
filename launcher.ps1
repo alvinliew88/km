@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (Simple, Reliable Activation)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Pure online activation, no Defender issues)
 
 # Clear terminal history
 try {
@@ -42,42 +42,22 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- Activation using official standalone scripts ----------
-function Start-Activation($Mode) {
-    $friendly = if ($Mode -eq "/HWID") { "Windows" } else { "Office" }
-    Write-Host "`n  [+] Preparing $friendly activation..." -ForegroundColor Green
+# ---------- Pure online activation with custom title ----------
+function Start-Activation($FunctionName) {
+    $friendly = if ($FunctionName -eq "HWID") { "Windows" } else { "Office" }
+    Write-Host "`n  [+] Starting $friendly activation in a new window..." -ForegroundColor Green
 
-    $scriptName = if ($Mode -eq "/HWID") { "HWID_Activation.cmd" } else { "Ohook_Activation_AIO.cmd" }
-    $title = if ($Mode -eq "/HWID") { "THE ONE WINDOWS AUTHORIZED v3.12" } else { "THE ONE OFFICE AUTHORIZED v3.12" }
-    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators/$scriptName"
-    $tempPath = "$env:TEMP\$scriptName"
-
-    try {
-        Write-Host "  Downloading latest $friendly activation script..." -ForegroundColor Gray
-        $web = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
-        $content = $web.Content
-
-        # Replace the title line only
-        $content = $content -replace '(?im)^title .*$', "title  $title"
-
-        # Remove the PowerShell diagnostic line that can trigger Defender
-        $content = $content -replace '.*PSEdition -ne.*Core.*pstst.*', 'rem disabled for compatibility'
-
-        # Ensure proper line endings and final empty line
-        $content = $content -replace '(?<!\r)\n', "`r`n"
-        if (-not $content.EndsWith("`r`n")) { $content += "`r`n" }
-
-        # Save to temp and run
-        [System.IO.File]::WriteAllText($tempPath, $content, [System.Text.Encoding]::ASCII)
-        Write-Host "  Launching activation window..." -ForegroundColor Cyan
-        $proc = Start-Process -FilePath cmd.exe -ArgumentList "/c `"$tempPath`"" -PassThru -Wait
-        Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
-
-        Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
-    } catch {
-        Write-Host "  [-] Failed to download or run activation script. Check your internet connection." -ForegroundColor Red
-        Start-Sleep 3
-    }
+    # Command that will be executed in the new PowerShell window
+    $psCommand = @"
+`$host.UI.RawUI.WindowTitle = 'THE ONE $friendly Activation'
+Write-Host 'Loading Microsoft Activation Script...'
+& { iex (irm https://get.activated.win); $FunctionName }
+Write-Host '`nActivation finished. Press any key to close this window.'
+`$null = `$host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+"@
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($psCommand))
+    Start-Process -FilePath powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded" -Wait
+    Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
 function Exit-And-Clean {
@@ -131,8 +111,8 @@ while ($true) {
     if ($ch -eq '0') { Exit-And-Clean }
 
     switch ($ch) {
-        '1' { Start-Activation "/HWID" }
-        '2' { Start-Activation "/Ohook" }
+        '1' { Start-Activation "HWID" }
+        '2' { Start-Activation "Ohook" }
         '3' {
             Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             cmd /c "start `"Full MAS`" powershell -NoExit -Command `"irm https://get.activated.win | iex`""
