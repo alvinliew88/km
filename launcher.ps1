@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Box UI, 30s idle, Chrome PDF, ALL without GIMP)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Key buffer clear, aligned box, stable)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -44,6 +44,7 @@ try {
 
 $brand = "Unknown"
 try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; if ($cs.Manufacturer) { $brand = $cs.Manufacturer } } catch {}
+$brand = if ($brand.Length -gt 35) { $brand.Substring(0, 35) + "..." } else { $brand }
 
 $windowsVersion = "Unknown"
 try {
@@ -61,8 +62,8 @@ $processor = "Unknown"
 try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
     $processor = $cpu.Name -replace '\s+', ' '
-    if ($processor.Length -gt 45) { $processor = $processor.Substring(0, 45) + "..." }
 } catch {}
+$processor = if ($processor.Length -gt 35) { $processor.Substring(0, 35) + "..." } else { $processor }
 
 $ram = "Unknown"
 try {
@@ -78,6 +79,7 @@ try {
     $freeGB  = [math]::Round($cDrive.FreeSpace / 1GB, 1)
     $storage = "$totalGB GB total / $freeGB GB free"
 } catch {}
+$storage = if ($storage.Length -gt 35) { $storage.Substring(0, 35) + "..." } else { $storage }
 
 # ----- Password -----
 $password = Read-Host "key" -AsSecureString
@@ -130,7 +132,6 @@ function Start-Activation {
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-        # Wrapper script with both key-press and ESC detection
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -146,13 +147,11 @@ echo    Press any key to return to main menu, or ESC to exit all.
 echo   --------------------------------------------------------
 echo.
 
-:waitloop
 choice /c 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ /t 7 /d 0 /n >nul
 if errorlevel 1 goto :keypressed
 :keypressed
 if "%errorlevel%"=="0" echo timeout > "$flagFile" & exit /b
 if "%errorlevel%"=="27" exit
-rem any other key returns to menu
 exit /b
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
@@ -290,7 +289,10 @@ while ($timeout -gt 0) {
     $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $proc.WaitForExit()
 
+    # Clear any stray key presses accumulated while sub-window was open
+    while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
+    Start-Sleep -Milliseconds 300
 }
 
 # ----- Debloat Windows (Menu 6) – Confirmation with timeout -----
@@ -393,7 +395,10 @@ while ($timeout -gt 0) {
     $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $proc.WaitForExit()
 
+    # Clear any stray keys
+    while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  Debloat window closed. Returning to main menu." -ForegroundColor Cyan
+    Start-Sleep -Milliseconds 300
 }
 
 # ----- Clean exit with history removal -----
@@ -425,7 +430,7 @@ function Get-MASVersion {
 }
 
 # ============================================================
-#  MAIN MENU (Box UI, 30-sec idle exit)
+#  MAIN MENU (Box UI, 30-sec idle exit, key buffer cleared)
 # ============================================================
 while ($true) {
     $masver = Get-MASVersion
@@ -455,7 +460,9 @@ while ($true) {
     Write-Host "  ║  [0] Exit Terminal                                      ║" -ForegroundColor DarkGray
     Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
 
-    # 30-second idle timeout
+    # Clear any leftover keystrokes before waiting
+    while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
+
     Write-Host "`n  > Select module (30s idle exit): " -NoNewline
     $startTime = Get-Date
     $timeoutSeconds = 30
