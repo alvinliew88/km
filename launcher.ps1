@@ -1,6 +1,6 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (生成 .bat 激活，Defender 不拦截)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Direct activation fix, English UI)
 
-# 清除终端历史
+# Clear terminal history
 try {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     Clear-History
@@ -41,41 +41,42 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- 激活：生成纯文本 .bat 文件，只包含您验证过的安全命令 ----------
+# ---------- Direct activation via MAS functions (no menu) ----------
 function Start-Activation($Mode) {
-    Write-Host "`n  [+] 正在准备激活..." -ForegroundColor Green
+    Write-Host "`n  [+] Preparing activation..." -ForegroundColor Green
     $tempBat = "$env:TEMP\THE_ONE_Activate.bat"
-    # 只写入最简单的原版 MAS 在线激活命令，Defender 绝不会拦截
+    # Call the correct function directly: HWID or Ohook
+    if ($Mode -eq "/HWID") { $masCommand = "HWID" } else { $masCommand = "Ohook" }
     @"
 @echo off
 title THE ONE Activation
-powershell -NoExit -Command "irm https://get.activated.win | iex ; $Mode"
+powershell -NoExit -Command "irm https://get.activated.win | iex; $masCommand"
 "@ | Out-File -FilePath $tempBat -Encoding ASCII
     Start-Process -FilePath cmd.exe -ArgumentList "/c `"$tempBat`"" -Wait
     Remove-Item $tempBat -Force -ErrorAction SilentlyContinue
-    Write-Host "`n  激活窗口已关闭，返回主菜单。" -ForegroundColor Cyan
+    Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
 function Invoke-DeepClean {
-    Write-Host "`n  [+] 正在深度清理临时文件...`n" -ForegroundColor Cyan
+    Write-Host "`n  [+] Deep cleaning temporary files...`n" -ForegroundColor Cyan
     $folders = @($env:TEMP, "$env:SystemRoot\Temp", "$env:SystemRoot\Prefetch", [Environment]::GetFolderPath('Recent'), "$env:LOCALAPPDATA\Microsoft\Windows\INetCache", "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files")
     foreach ($f in $folders) {
         if (Test-Path $f) {
-            Write-Host "  清理: $f" -ForegroundColor DarkGray
+            Write-Host "  Cleaning: $f" -ForegroundColor DarkGray
             $items = Get-ChildItem $f -Recurse -Force -ErrorAction SilentlyContinue
             $c = 0
             foreach ($i in $items) { try { Remove-Item $i.FullName -Force -Recurse -ErrorAction Stop } catch {}; $c++; if ($c % 50 -eq 0) { Write-Host "." -NoNewline } }
-            Write-Host " 完成。"
+            Write-Host " Done."
         }
     }
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "`n  [+] 优化完成，7 秒后退出所有终端..." -ForegroundColor Green
+    Write-Host "`n  [+] Optimization complete. Exiting all terminals in 7 seconds..." -ForegroundColor Green
     Start-Sleep 7
     Exit-And-Clean
 }
 
 function Invoke-SoftwareInstall {
-    Write-Host "`n  正在启动软件安装器..." -ForegroundColor Cyan
+    Write-Host "`n  Launching Software Installer..." -ForegroundColor Cyan
     $tempPs1 = "$env:TEMP\THE_ONE_INSTALL.ps1"
     @'
 $host.UI.RawUI.WindowTitle = "THE ONE Software Installer (30s auto-close)"
@@ -83,9 +84,9 @@ Write-Host "`n  --------------------------------------------------------" -Foreg
 Write-Host "        T H E   O N E   S O F T W A R E   I N S T A L L E R" -ForegroundColor Cyan
 Write-Host "  --------------------------------------------------------`n"
 function Wait-KeyOrTimeout($s, $msg) { Write-Host $msg -NoNewline; $end = (Get-Date).AddSeconds($s); while ((Get-Date) -lt $end) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); return $k.KeyChar } Start-Sleep -Milliseconds 200 } return $null }
-if (!(Get-Command winget.exe -ErrorAction SilentlyContinue)) { Write-Host "  [ERROR] 未找到 winget。" -ForegroundColor Red; Read-Host "  按 Enter 返回"; exit }
-Write-Host "  [1] Google Chrome`n  [2] 7-Zip`n  [3] VLC`n  [4] GIMP`n  [A] 全部安装 (1-3)`n  [0] 返回" -ForegroundColor White
-$choice = Wait-KeyOrTimeout 30 "  输入选项 (30s 超时): "; if (!$choice) { Write-Host "`n  超时。"; Start-Sleep 1; exit }
+if (!(Get-Command winget.exe -ErrorAction SilentlyContinue)) { Write-Host "  [ERROR] winget not found." -ForegroundColor Red; Read-Host "  Press Enter to return"; exit }
+Write-Host "  [1] Google Chrome`n  [2] 7-Zip`n  [3] VLC`n  [4] GIMP`n  [A] Install ALL (1-3)`n  [0] Return" -ForegroundColor White
+$choice = Wait-KeyOrTimeout 30 "  Enter choice (30s timeout): "; if (!$choice) { Write-Host "`n  Timeout."; Start-Sleep 1; exit }
 Write-Host $choice
 switch -Wildcard ($choice) {
     '0' { exit }
@@ -94,20 +95,20 @@ switch -Wildcard ($choice) {
     '2' { winget install --id 7zip.7zip --silent --accept-source-agreements --accept-package-agreements }
     '3' { winget install --id VideoLAN.VLC --silent --accept-source-agreements --accept-package-agreements }
     '4' { winget install --id GIMP.GIMP --silent --accept-source-agreements --accept-package-agreements }
-    default { Write-Host "  无效选项。" -ForegroundColor Red; Start-Sleep 2 }
+    default { Write-Host "  Invalid choice." -ForegroundColor Red; Start-Sleep 2 }
 }
-Write-Host "`n  安装完成。窗口将在 10 秒内关闭，或按 Enter 立即关闭。" -ForegroundColor Green
+Write-Host "`n  Installation completed. Window closes in 10s or press Enter." -ForegroundColor Green
 $timeout = 10; while ($timeout -gt 0) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); if ($k.Key -eq "Enter") { break } } Start-Sleep 1; $timeout-- }
 '@ | Out-File -FilePath $tempPs1 -Encoding UTF8
     $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $p.WaitForExit()
     Remove-Item $tempPs1 -Force -ErrorAction SilentlyContinue
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
-    Write-Host "`n  安装器已关闭。" -ForegroundColor Cyan
+    Write-Host "`n  Installer closed." -ForegroundColor Cyan
 }
 
 function Invoke-Debloat {
-    Write-Host "`n  [+] 正在移除预装应用..." -ForegroundColor Cyan
+    Write-Host "`n  [+] Removing bloatware..." -ForegroundColor Cyan
     $tempPs1 = "$env:TEMP\THE_ONE_DEBLOAT.ps1"
     @'
 $host.UI.RawUI.WindowTitle = "THE ONE Debloater (30s auto-close)"
@@ -115,26 +116,26 @@ Write-Host "`n  --------------------------------------------------------" -Foreg
 Write-Host "              T H E   O N E   D E B L O A T E R" -ForegroundColor Cyan
 Write-Host "  --------------------------------------------------------`n"
 $packages = @('Microsoft.549981C3F5F10','Microsoft.MicrosoftOfficeHub','Microsoft.OneDriveSync','Microsoft.XboxApp','Microsoft.XboxGameCallableUI','Microsoft.XboxSpeechToTextOverlay','Microsoft.Xbox.TCUI','Microsoft.XboxGamingOverlay','Microsoft.XboxIdentityProvider','Microsoft.BingNews','Microsoft.BingWeather','Microsoft.BingSports','Microsoft.BingFinance','Microsoft.GetHelp','Microsoft.Getstarted','Microsoft.MicrosoftSolitaireCollection','Microsoft.MixedReality.Portal','Microsoft.SkypeApp','Microsoft.WindowsFeedbackHub','Microsoft.WindowsMaps','Microsoft.YourPhone','Microsoft.ZuneMusic','Microsoft.ZuneVideo')
-Write-Host "  以下应用将被移除:" -ForegroundColor White; foreach ($p in $packages) { Write-Host "    - $p" -ForegroundColor Gray }
-Write-Host "`n  按 1 确认移除，按其他键取消 (30s 超时):" -ForegroundColor Yellow
+Write-Host "  Apps to remove:" -ForegroundColor White; foreach ($p in $packages) { Write-Host "    - $p" -ForegroundColor Gray }
+Write-Host "`n  Press 1 to confirm removal, any other key to cancel. (30s timeout)" -ForegroundColor Yellow
 function Wait-KeyOrTimeout($s, $msg) { Write-Host $msg -NoNewline; $end = (Get-Date).AddSeconds($s); while ((Get-Date) -lt $end) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); return $k.KeyChar } Start-Sleep -Milliseconds 200 } return $null }
-$confirm = Wait-KeyOrTimeout 30 "  您的选择: "; if (!$confirm) { Write-Host "`n  超时。"; Start-Sleep 1; exit }
+$confirm = Wait-KeyOrTimeout 30 "  Your choice: "; if (!$confirm) { Write-Host "`n  Timeout."; Start-Sleep 1; exit }
 Write-Host $confirm
-if ($confirm -ne '1') { Write-Host "  已取消。" -ForegroundColor Yellow; Start-Sleep 2; exit }
-Write-Host "`n  正在移除..." -ForegroundColor Gray
+if ($confirm -ne '1') { Write-Host "  Cancelled." -ForegroundColor Yellow; Start-Sleep 2; exit }
+Write-Host "`n  Removing packages..." -ForegroundColor Gray
 $removed = @(); $failed = @()
 foreach ($pkg in $packages) { try { Get-AppxPackage -Name $pkg -ErrorAction Stop | Remove-AppxPackage -ErrorAction Stop; $removed += $pkg } catch { $failed += $pkg } }
-if ($removed.Count) { Write-Host "`n  已移除: $($removed -join ', ')" -ForegroundColor Green }
-if ($failed.Count) { Write-Host "  失败: $($failed -join ', ')" -ForegroundColor Red }
-if (!$removed -and !$failed) { Write-Host "  未发现任何包。" -ForegroundColor Yellow }
-Write-Host "`n  操作完成。窗口将在 10 秒内关闭，或按 Enter 立即关闭。" -ForegroundColor Green
+if ($removed.Count) { Write-Host "`n  Removed: $($removed -join ', ')" -ForegroundColor Green }
+if ($failed.Count) { Write-Host "  Failed: $($failed -join ', ')" -ForegroundColor Red }
+if (!$removed -and !$failed) { Write-Host "  No packages found." -ForegroundColor Yellow }
+Write-Host "`n  Operation complete. Window closes in 10s or press Enter." -ForegroundColor Green
 $timeout = 10; while ($timeout -gt 0) { if ([Console]::KeyAvailable) { $k = [Console]::ReadKey($true); if ($k.Key -eq "Enter") { break } } Start-Sleep 1; $timeout-- }
 '@ | Out-File -FilePath $tempPs1 -Encoding UTF8
     $p = Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $p.WaitForExit()
     Remove-Item $tempPs1 -Force -ErrorAction SilentlyContinue
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
-    Write-Host "`n  去臃肿已完成。" -ForegroundColor Cyan
+    Write-Host "`n  Debloat finished." -ForegroundColor Cyan
 }
 
 function Exit-And-Clean {
@@ -180,7 +181,7 @@ while ($true) {
     $sw.Stop()
 
     if (!$key) {
-        Write-Host "`n  [!] 30 秒无操作，自动退出..." -ForegroundColor Red
+        Write-Host "`n  [!] No input for 30 seconds. Exiting..." -ForegroundColor Red
         Start-Sleep 2
         Exit-And-Clean
     }
