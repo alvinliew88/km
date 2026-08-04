@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Instant menu response, cached version)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Fast, Simple UI, Countdown, Menu order adjusted)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -44,7 +44,6 @@ try {
 
 $brand = "Unknown"
 try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; if ($cs.Manufacturer) { $brand = $cs.Manufacturer } } catch {}
-$brand = if ($brand.Length -gt 35) { $brand.Substring(0, 35) + "..." } else { $brand }
 
 $windowsVersion = "Unknown"
 try {
@@ -63,7 +62,6 @@ try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
     $processor = $cpu.Name -replace '\s+', ' '
 } catch {}
-$processor = if ($processor.Length -gt 35) { $processor.Substring(0, 35) + "..." } else { $processor }
 
 $ram = "Unknown"
 try {
@@ -79,7 +77,6 @@ try {
     $freeGB  = [math]::Round($cDrive.FreeSpace / 1GB, 1)
     $storage = "$totalGB GB total / $freeGB GB free"
 } catch {}
-$storage = if ($storage.Length -gt 35) { $storage.Substring(0, 35) + "..." } else { $storage }
 
 # ----- Password -----
 $password = Read-Host "key" -AsSecureString
@@ -218,7 +215,7 @@ function Invoke-DeepClean {
     Exit-And-Clean
 }
 
-# ----- Software Installer (Menu 5) – Instant return, no delay -----
+# ----- Software Installer (Menu 4) – Instant return -----
 function Invoke-SoftwareInstall {
     Write-Host "`n  Launching Software Installation Menu in a new window..." -ForegroundColor Cyan
 
@@ -300,12 +297,11 @@ while ($timeout -gt 0) {
     $proc = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`"" -PassThru
     $proc.WaitForExit()
 
-    # No extra delay, just clear keys and return
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
     Write-Host "`n  Installer window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
-# ----- Debloat Windows (Menu 6) – Instant return, no delay -----
+# ----- Debloat Windows (Menu 6) – Instant return -----
 function Invoke-Debloat {
     Write-Host "`n  [+] Removing bloatware in a new window..." -ForegroundColor Cyan
 
@@ -425,70 +421,80 @@ function Exit-And-Clean {
 }
 
 # ============================================================
-#  MAIN MENU (Box UI, 30-sec idle exit, instant response)
+#  MAIN MENU (Simple UI, 30-sec countdown, reordered)
 # ============================================================
 while ($true) {
     Clear-Host
 
-    Write-Host "  ╔══════════════════════════════════════════════════════════╗" -ForegroundColor DarkCyan
-    Write-Host "  ║        T H E   O N E   S Y S T E M S   v$script:masver          ║" -ForegroundColor Cyan
-    Write-Host "  ║         Authorized Operations Terminal                   ║" -ForegroundColor DarkGray
-    Write-Host "  ╠══════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    Write-Host "  ║  PC Name      : $($pcName.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  User Account : $($userName.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  Brand        : $($brand.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  MAC Address  : $($macAddress.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  Local IP     : $($localIp.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  Windows      : $($windowsVersion.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  Install Date : $($installDate.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  Processor    : $($processor.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  RAM          : $($ram.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ║  Storage (C:) : $($storage.PadRight(35))   ║" -ForegroundColor White
-    Write-Host "  ╠══════════════════════════════════════════════════════════╣" -ForegroundColor DarkCyan
-    Write-Host "  ║  [1] Reactivate THE ONE PC Authorized Windows           ║" -ForegroundColor Green
-    Write-Host "  ║  [2] Reactivate THE ONE PC Office                       ║" -ForegroundColor Green
-    Write-Host "  ║  [3] THE ONE PC Optimization                            ║" -ForegroundColor Green
-    Write-Host "  ║  [4] Full THE ONE Activation Suite (All Options)        ║" -ForegroundColor Green
-    Write-Host "  ║  [5] THE ONE Software Installer                         ║" -ForegroundColor Green
-    Write-Host "  ║  [6] THE ONE Debloat Windows                            ║" -ForegroundColor Green
-    Write-Host "  ║  [0] Exit Terminal                                      ║" -ForegroundColor DarkGray
-    Write-Host "  ╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkCyan
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v$script:masver" -ForegroundColor Cyan
+    Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
+    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
+    Write-Host "  PC Name      : $pcName" -ForegroundColor White
+    Write-Host "  User Account : $userName" -ForegroundColor White
+    Write-Host "  Brand        : $brand" -ForegroundColor White
+    Write-Host "  MAC Address  : $macAddress" -ForegroundColor White
+    Write-Host "  Local IP     : $localIp" -ForegroundColor White
+    Write-Host "  Windows      : $windowsVersion" -ForegroundColor White
+    Write-Host "  Install Date : $installDate" -ForegroundColor White
+    Write-Host "  Processor    : $processor" -ForegroundColor White
+    Write-Host "  RAM          : $ram" -ForegroundColor White
+    Write-Host "  Storage (C:) : $storage" -ForegroundColor White
+    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
+    Write-Host "  [1] Reactivate THE ONE PC Authorized Windows" -ForegroundColor Green
+    Write-Host "  [2] Reactivate THE ONE PC Office" -ForegroundColor Green
+    Write-Host "  [3] Full THE ONE Activation Suite (All Options)" -ForegroundColor Green
+    Write-Host "  [4] THE ONE Software Installer" -ForegroundColor Green
+    Write-Host "  [5] THE ONE PC Optimization" -ForegroundColor Green
+    Write-Host "  [6] THE ONE Debloat Windows" -ForegroundColor Green
+    Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
+    Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
 
-    # Clear stray keys before waiting
+    # Clear stray keys
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
 
-    Write-Host "`n  > Select module (30s idle exit): " -NoNewline
-    $startTime = Get-Date
-    $timeoutSeconds = 30
+    # Countdown display
+    $timeout = 30
     $key = $null
-    while ($null -eq $key -and ((Get-Date) - $startTime).TotalSeconds -lt $timeoutSeconds) {
-        if ([Console]::KeyAvailable) {
-            $key = [Console]::ReadKey($true)
-            break
+    $startTime = Get-Date
+    while ($null -eq $key -and $timeout -gt 0) {
+        $remaining = $timeout - [math]::Floor((Get-Date) - $startTime).TotalSeconds
+        if ($remaining -lt 0) { $remaining = 0 }
+        Write-Host "`r  > Select module (${remaining}s idle exit): " -NoNewline
+        $waitStart = Get-Date
+        while ($null -eq $key -and ((Get-Date) - $startTime).TotalSeconds -lt $timeout) {
+            if ([Console]::KeyAvailable) {
+                $key = [Console]::ReadKey($true)
+                break
+            }
+            # Refresh countdown every second
+            if (((Get-Date) - $waitStart).TotalSeconds -ge 1) { break }
+            Start-Sleep -Milliseconds 200
         }
-        Start-Sleep -Milliseconds 200
+        if ($null -eq $key) {
+            $timeout = $timeout - [math]::Floor((Get-Date) - $startTime).TotalSeconds
+        }
     }
 
     if ($null -eq $key) {
-        Write-Host "`n  [!] No input detected for 30 seconds. Exiting..." -ForegroundColor Red
+        Write-Host "`r  [!] No input detected for 30 seconds. Exiting...                              " -ForegroundColor Red
         Start-Sleep -Seconds 2
         Exit-And-Clean
     }
 
     $keyChar = $key.KeyChar
-    Write-Host $keyChar -ForegroundColor White
+    Write-Host "`r  > Select module (${timeout}s idle exit): $keyChar                              " -ForegroundColor White
 
     if ($keyChar -eq '0') { Exit-And-Clean }
 
     switch ($keyChar) {
         '1' { Start-Activation "/HWID" "Windows Activation" }
         '2' { Start-Activation "/Ohook" "Office Activation" }
-        '3' { Invoke-DeepClean }
-        '4' {
+        '3' {
             Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String)
         }
-        '5' { Invoke-SoftwareInstall }
+        '4' { Invoke-SoftwareInstall }
+        '5' { Invoke-DeepClean }
         '6' { Invoke-Debloat }
     }
 }
