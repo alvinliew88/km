@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (Auto-updating activation, simple menu)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Simple, Reliable Activation)
 
 # Clear terminal history
 try {
@@ -42,29 +42,28 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- Auto-updating activation using official standalone scripts ----------
-function Start-Activation {
-    param(
-        [string]$FriendlyName,      # e.g. "Windows" or "Office"
-        [string]$OfficialScript,    # e.g. "HWID_Activation.cmd" or "Ohook_Activation_AIO.cmd"
-        [string]$CustomTitle        # e.g. "THE ONE WINDOWS AUTHORIZED v3.12"
-    )
-    Write-Host "`n  [+] Downloading latest $FriendlyName activation script..." -ForegroundColor Green
-    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators/$OfficialScript"
-    $tempPath = "$env:TEMP\THE_ONE_$OfficialScript"
+# ---------- Activation using official standalone scripts ----------
+function Start-Activation($Mode) {
+    $friendly = if ($Mode -eq "/HWID") { "Windows" } else { "Office" }
+    Write-Host "`n  [+] Preparing $friendly activation..." -ForegroundColor Green
+
+    $scriptName = if ($Mode -eq "/HWID") { "HWID_Activation.cmd" } else { "Ohook_Activation_AIO.cmd" }
+    $title = if ($Mode -eq "/HWID") { "THE ONE WINDOWS AUTHORIZED v3.12" } else { "THE ONE OFFICE AUTHORIZED v3.12" }
+    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/Separate-Files-Version/Activators/$scriptName"
+    $tempPath = "$env:TEMP\$scriptName"
 
     try {
-        # Download the official script
+        Write-Host "  Downloading latest $friendly activation script..." -ForegroundColor Gray
         $web = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
         $content = $web.Content
 
-        # Replace the title line only (first occurrence)
-        $content = $content -replace '(?im)^title .*$', "title  $CustomTitle"
+        # Replace the title line only
+        $content = $content -replace '(?im)^title .*$', "title  $title"
 
         # Remove the PowerShell diagnostic line that can trigger Defender
         $content = $content -replace '.*PSEdition -ne.*Core.*pstst.*', 'rem disabled for compatibility'
 
-        # Ensure correct line endings
+        # Ensure proper line endings and final empty line
         $content = $content -replace '(?<!\r)\n', "`r`n"
         if (-not $content.EndsWith("`r`n")) { $content += "`r`n" }
 
@@ -76,7 +75,7 @@ function Start-Activation {
 
         Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
     } catch {
-        Write-Host "  [-] Failed to download or run activation script." -ForegroundColor Red
+        Write-Host "  [-] Failed to download or run activation script. Check your internet connection." -ForegroundColor Red
         Start-Sleep 3
     }
 }
@@ -132,8 +131,8 @@ while ($true) {
     if ($ch -eq '0') { Exit-And-Clean }
 
     switch ($ch) {
-        '1' { Start-Activation "Windows" "HWID_Activation.cmd" "THE ONE WINDOWS AUTHORIZED v3.12" }
-        '2' { Start-Activation "Office" "Ohook_Activation_AIO.cmd" "THE ONE OFFICE AUTHORIZED v3.12" }
+        '1' { Start-Activation "/HWID" }
+        '2' { Start-Activation "/Ohook" }
         '3' {
             Write-Host "`n  [+] Launching Full THE ONE Activation Suite..." -ForegroundColor Cyan
             cmd /c "start `"Full MAS`" powershell -NoExit -Command `"irm https://get.activated.win | iex`""
