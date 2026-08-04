@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Ultra-fast, no countdown errors, clean UI)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Reliable activation, no timeout in sub-window)
 
 # ---------- Privacy: clear terminal history ----------
 try {
@@ -121,14 +121,14 @@ function Get-MASScript {
     throw "Unable to download MAS script from any known URL."
 }
 
-# ----- Activation (keeps window open, 7-sec timeout, ESC to exit) -----
+# ----- Activation (reliable, no timeout) -----
 function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
+    Write-Host "  A new window will open. After activation finishes, close that window to return here." -ForegroundColor Cyan
 
     $tempAIO   = "$env:TEMP\THE_ONE_AIO.cmd"
     $tempRun   = "$env:TEMP\THE_ONE_RUN.cmd"
-    $flagFile  = "$env:TEMP\THE_ONE_EXIT.flag"
 
     try {
         $raw = Get-MASScript
@@ -138,8 +138,8 @@ function Start-Activation {
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
-        Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
+        # Simple wrapper: run activation then pause forever until user closes window
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -151,30 +151,16 @@ echo.
 call "$tempAIO" $Mode
 echo.
 echo   --------------------------------------------------------
-echo    Press any key to return to main menu, or ESC to exit all.
+echo    Activation finished. Press any key to close this window.
 echo   --------------------------------------------------------
-echo.
-
-choice /c 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ /t 7 /d 0 /n >nul
-if errorlevel 1 goto :keypressed
-:keypressed
-if "%errorlevel%"=="0" echo timeout > "$flagFile" & exit /b
-if "%errorlevel%"=="27" exit
-exit /b
+pause >nul
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
         $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
         $proc.WaitForExit()
 
-        if (Test-Path $flagFile) {
-            Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
-            Write-Host "`n  [!] No key was pressed. Exiting all terminals..." -ForegroundColor Red
-            Start-Sleep -Seconds 1
-            Exit-And-Clean
-        } else {
-            Write-Host "`n  [+] Returning to main menu." -ForegroundColor Cyan
-        }
+        Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
     }
     catch {
         Write-Host "  [-] Error: $($_.Exception.Message)" -ForegroundColor Red
@@ -421,7 +407,7 @@ function Exit-And-Clean {
 }
 
 # ============================================================
-#  MAIN MENU (Simple, instant, 30s idle exit)
+#  MAIN MENU (Simple, fast, 30s idle exit)
 # ============================================================
 while ($true) {
     Clear-Host
@@ -449,10 +435,9 @@ while ($true) {
     Write-Host "  [0] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
 
-    # Clear stray keys
     while ([Console]::KeyAvailable) { [Console]::ReadKey($true) | Out-Null }
-
     Write-Host "`n  > Select module (30s idle exit): " -NoNewline
+
     $timeout = 30
     $key = $null
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
