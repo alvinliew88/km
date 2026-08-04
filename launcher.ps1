@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (Pure English, direct HWID/Ohook activation)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Direct activation with custom title)
 
 # Clear terminal history
 try {
@@ -41,20 +41,14 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# ---------- Direct activation using MAS functions ----------
+# ---------- Direct activation with custom title, no temp files ----------
 function Start-Activation($Mode) {
     Write-Host "`n  [+] Preparing activation..." -ForegroundColor Green
-    $tempBat = "$env:TEMP\THE_ONE_Activate.bat"
-    # Use correct MAS function names: HWID or Ohook
-    if ($Mode -eq "/HWID") { $masFunction = "HWID" } else { $masFunction = "Ohook" }
-    $batContent = @"
-@echo off
-title THE ONE Activation
-powershell -NoExit -Command "irm https://get.activated.win | iex; $masFunction"
-"@
-    [System.IO.File]::WriteAllText($tempBat, $batContent, [System.Text.Encoding]::ASCII)
-    Start-Process -FilePath cmd.exe -ArgumentList "/c `"$tempBat`"" -Wait
-    Remove-Item $tempBat -Force -ErrorAction SilentlyContinue
+    # Choose the correct MAS function: HWID or Ohook
+    if ($Mode -eq "/HWID") { $masFunc = "HWID" } else { $masFunc = "Ohook" }
+    # Build a command that sets the window title, loads MAS, and executes the function
+    $psCmd = "`$host.UI.RawUI.WindowTitle='THE ONE Activation'; iex (curl.exe -s --doh-url https://1.1.1.1/dns-query https://get.activated.win | Out-String); $masFunc"
+    Start-Process -FilePath powershell.exe -ArgumentList "-NoExit -Command `"$psCmd`"" -Wait
     Write-Host "`n  Activation window closed. Returning to main menu." -ForegroundColor Cyan
 }
 
