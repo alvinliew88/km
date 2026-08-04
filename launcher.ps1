@@ -1,46 +1,67 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Modern, Clean Exit, History Clear)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (No red errors, universal compatibility)
 
-# Clear history immediately (no arrow-up leak)
-try { [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory() } catch {}
-try { Clear-History } catch {}
+# 清除终端历史（隐私保护）
+try {
+    [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
+    Clear-History
+    $historyPaths = @(
+        "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
+        (Get-PSReadLineOption).HistorySavePath
+    )
+    foreach ($hp in $historyPaths) {
+        if ($hp -and (Test-Path $hp)) { Remove-Item $hp -Force -ErrorAction SilentlyContinue }
+    }
+} catch {}
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
-$localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred |
-    Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+
+# IP地址获取（自动回退到 ipconfig，无红字）
+$localIp = "Unknown"
 try {
-    $macAddress = (Get-NetAdapter | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
+    $temp = Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -ErrorAction Stop 2>$null
+    $localIp = ($temp | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 } catch {
-    $macAddress = "UNKNOWN"
+    try {
+        $lines = & ipconfig.exe | Select-String "IPv4 Address"
+        if ($lines.Count -gt 0) { $localIp = ($lines[0] -replace '.*:\s*', '').Trim() }
+    } catch {}
 }
 
-# Brand
-$brand = "Unknown"
+# MAC地址获取（自动回退到 getmac，无红字）
+$macAddress = "UNKNOWN"
 try {
-    $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
-    if ($cs.Manufacturer) { $brand = $cs.Manufacturer }
-} catch {}
+    $temp = Get-NetAdapter -ErrorAction Stop 2>$null
+    $macAddress = ($temp | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
+} catch {
+    try {
+        $macOutput = & getmac.exe /fo csv
+        $lines = $macOutput -split "`n"
+        if ($lines.Count -ge 2) { $macAddress = ($lines[1] -split ',')[0].Trim('"') }
+    } catch {}
+}
 
-# Windows Version
+# 品牌（制造商）
+$brand = "Unknown"
+try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; if ($cs.Manufacturer) { $brand = $cs.Manufacturer } } catch {}
+
+# Windows版本
 $windowsVersion = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
     $caption = $os.Caption -replace 'Microsoft ', ''
-    $displayVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DisplayVersion
-    if ($displayVersion) { $caption += " $displayVersion" }
+    $dv = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -ErrorAction SilentlyContinue).DisplayVersion
+    if ($dv) { $caption += " $dv" }
     $windowsVersion = $caption
 } catch {}
 
-# Install Date
+# 安装日期
 $installDate = "Unknown"
-try {
-    $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
-    if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") }
-} catch {}
+try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop; if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") } } catch {}
 
-# Processor
+# 处理器
 $processor = "Unknown"
 try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
@@ -48,7 +69,7 @@ try {
     if ($processor.Length -gt 45) { $processor = $processor.Substring(0, 45) + "..." }
 } catch {}
 
-# RAM
+# 内存
 $ram = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -56,7 +77,7 @@ try {
     $ram = "$totalGB GB"
 } catch {}
 
-# Storage (C:)
+# C盘存储
 $storage = "Unknown"
 try {
     $cDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop
@@ -99,10 +120,8 @@ function Start-Activation {
 
         [System.IO.File]::WriteAllText($tempAIO, $raw, [System.Text.Encoding]::ASCII)
 
-        # Remove old flag
         Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
 
-        # Wrapper: wait for keypress, else create flag file to signal main script to exit
         $wrapper = @"
 @echo off
 title  THE ONE $FriendlyName v$ver
@@ -127,19 +146,14 @@ exit
 "@
         [System.IO.File]::WriteAllText($tempRun, $wrapper, [System.Text.Encoding]::ASCII)
 
-        # Launch the activation window and keep its process object
         $proc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$tempRun`"" -PassThru
-
-        # Wait until the activation window closes (no infinite wait)
         $proc.WaitForExit()
 
-        # Now check if the flag file was created (meaning timeout occurred)
         if (Test-Path $flagFile) {
             Remove-Item -Path $flagFile -Force -ErrorAction SilentlyContinue
             Write-Host "`n  [!] No key was pressed. Exiting all terminals..." -ForegroundColor Red
             Start-Sleep -Seconds 1
-            # This will close the main PowerShell window
-            exit
+            Exit-And-Clean
         } else {
             Write-Host "`n  [+] User pressed a key. Returning to main menu." -ForegroundColor Cyan
         }
@@ -151,7 +165,8 @@ exit
 }
 
 function Invoke-DeepClean {
-    Write-Host "`n  [+] Deep cleaning system temporary files..." -ForegroundColor Cyan
+    Write-Host "`n  [+] Deep cleaning system temporary files...`n" -ForegroundColor Cyan
+
     $folders = @(
         $env:TEMP,
         "$env:SystemRoot\Temp",
@@ -160,30 +175,39 @@ function Invoke-DeepClean {
         "$env:LOCALAPPDATA\Microsoft\Windows\INetCache",
         "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files"
     )
+
     foreach ($folder in $folders) {
         if (Test-Path $folder) {
             Write-Host "  Cleaning: $folder" -ForegroundColor DarkGray
-            Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue |
-                Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+            $files = Get-ChildItem $folder -Recurse -Force -ErrorAction SilentlyContinue
+            $cnt = 0
+            foreach ($file in $files) {
+                try { Remove-Item $file.FullName -Force -Recurse -ErrorAction Stop } catch {}
+                $cnt++
+                if ($cnt % 50 -eq 0) { Write-Host "." -NoNewline }
+            }
+            Write-Host " Done."
         }
     }
+
     try { cleanmgr /sagerun:1 | Out-Null } catch {}
-    Write-Host "`n  [+] PC Optimized successfully. Press any key to return to main menu." -ForegroundColor Green
-    Write-Host "  Will auto-exit in 7 seconds if no key is pressed." -ForegroundColor DarkGray
+    Write-Host "`n  [+] PC Optimized successfully. Exiting all terminals now..." -ForegroundColor Green
+    Start-Sleep -Seconds 2
+    Exit-And-Clean
+}
 
-    $timeout = 7
-    $keyPressed = $false
-    while ($timeout -gt 0 -and -not $keyPressed) {
-        if ([Console]::KeyAvailable) {
-            $keyInfo = [Console]::ReadKey($true)
-            $keyPressed = $true
-        } else {
-            Start-Sleep -Seconds 1
-            $timeout--
+function Exit-And-Clean {
+    # 最终历史记录清理
+    try {
+        $historyPaths = @(
+            "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
+            (Get-PSReadLineOption).HistorySavePath
+        )
+        foreach ($hp in $historyPaths) {
+            if ($hp -and (Test-Path $hp)) { Remove-Item $hp -Force -ErrorAction SilentlyContinue }
         }
-    }
-
-    if ($keyPressed) { return } else { exit }
+    } catch {}
+    exit
 }
 
 function Get-MASVersion {
@@ -195,7 +219,7 @@ function Get-MASVersion {
 }
 
 # ------------------------------------------------------------
-#  MODERN CLEAN UI (No boxes, only subtle separators)
+#  现代简洁界面
 # ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
@@ -228,7 +252,7 @@ while ($true) {
     $key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
     Write-Host "$key" -ForegroundColor White
 
-    if ($key -eq '0') { exit }
+    if ($key -eq '0') { Exit-And-Clean }
 
     switch ($key) {
         '1' { Start-Activation "/HWID" "Windows Activation" }
