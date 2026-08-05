@@ -1,4 +1,4 @@
-# launcher.ps1 - THE ONE SYSTEM v3.12 (Final Online Activation, Time & IP, Dynamic Version)
+# launcher.ps1 - THE ONE SYSTEM v3.12 (Final, pure online activation, time & IP)
 
 # Clear terminal history
 try {
@@ -64,25 +64,12 @@ $password = Read-Host "key" -AsSecureString
 $passString = if ($password) { [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
 if ($passString -ne "8888") { Write-Host "`n[!] ACCESS DENIED" -ForegroundColor Red; Start-Sleep 2; exit }
 
-# Dynamic version fetching (fail -> ?.?)
-function Get-MASVersion {
-    try {
-        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd" -ErrorAction Stop -TimeoutSec 5
-        if ($raw -match 'set\s+masver=([\d.]+)') { return $Matches[1] }
-    } catch {}
-    try {
-        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd" -ErrorAction Stop -TimeoutSec 5
-        if ($raw -match 'set\s+masver=([\d.]+)') { return $Matches[1] }
-    } catch {}
-    return "?.?"
-}
-
-# Activation – pure online, direct function call
+# ---------- Activation (pure online, direct) ----------
 function Start-Activation($FunctionName) {
     $friendly = if ($FunctionName -eq "HWID") { "Windows" } else { "Office" }
-    Write-Host "`n  [+] Starting THE ONE $friendly Activation..." -ForegroundColor Green
+    Write-Host "`n  [+] Starting $friendly activation..." -ForegroundColor Green
 
-    # Build command that sets title, loads MAS, and executes the activation function
+    # Build command that sets window title, loads MAS, and executes the function
     $cmd = "powershell -NoExit -Command `"`$host.UI.RawUI.WindowTitle='THE ONE $friendly Activation'; irm https://get.activated.win | iex; $FunctionName`""
     Start-Process -FilePath cmd.exe -ArgumentList "/c start `"$cmd`"" -Wait
 
@@ -94,13 +81,11 @@ function Exit-And-Clean {
     exit
 }
 
-# Main menu loop
+# ---------- Main menu ----------
 while ($true) {
-    $masver = Get-MASVersion
-    $currentTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Clear-Host
-
-    Write-Host "`n  T H E   O N E   S Y S T E M S   v$masver" -ForegroundColor Cyan
+    $currentTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Host "`n  T H E   O N E   S Y S T E M S   v3.12" -ForegroundColor Cyan
     Write-Host "  Authorized Operations Terminal" -ForegroundColor DarkGray
     Write-Host "  ────────────────────────────────────────────────" -ForegroundColor DarkCyan
     Write-Host "  PC Name      : $pcName" -ForegroundColor White
