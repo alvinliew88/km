@@ -1,6 +1,6 @@
-# launcher.ps1 - THE ONE SYSTEM v3.1 (Fully silent, no red errors)
+# launcher.ps1 - THE ONE SYSTEM v3.1 (Dual fallback URLs, zero red errors)
 
-# ---------- PRIVACY : Clear terminal history ----------
+# ---------- 隐私清理 ----------
 try {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     Clear-History
@@ -18,11 +18,11 @@ try {
 $pcName = $env:COMPUTERNAME
 $userName = $env:USERNAME
 
-# Local IP – silently fallback to ipconfig if Get-NetIPAddress fails
+# IP 地址（静默回退到 ipconfig）
 $localIp = "Unknown"
 try {
-    $localIp = (Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -ErrorAction Stop |
-        Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
+    $temp = Get-NetIPAddress -AddressFamily IPv4 -AddressState Preferred -ErrorAction Stop 2>$null
+    $localIp = ($temp | Where-Object InterfaceAlias -NotMatch 'Loopback' | Select-Object -First 1).IPAddress
 } catch {
     try {
         $lines = & ipconfig.exe | Select-String "IPv4 Address"
@@ -30,10 +30,11 @@ try {
     } catch {}
 }
 
-# MAC Address – silently fallback to getmac if Get-NetAdapter fails
+# MAC 地址（静默回退到 getmac）
 $macAddress = "UNKNOWN"
 try {
-    $macAddress = (Get-NetAdapter -ErrorAction Stop | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
+    $temp = Get-NetAdapter -ErrorAction Stop 2>$null
+    $macAddress = ($temp | Where-Object Status -eq 'Up' | Select-Object -First 1).MacAddress
 } catch {
     try {
         $macOutput = & getmac.exe /fo csv
@@ -42,11 +43,11 @@ try {
     } catch {}
 }
 
-# Brand
+# 品牌
 $brand = "Unknown"
 try { $cs = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop; if ($cs.Manufacturer) { $brand = $cs.Manufacturer } } catch {}
 
-# Windows Version
+# Windows 版本
 $windowsVersion = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -56,11 +57,11 @@ try {
     $windowsVersion = $caption
 } catch {}
 
-# Install Date
+# 安装日期
 $installDate = "Unknown"
 try { $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop; if ($os.InstallDate) { $installDate = $os.InstallDate.ToString("yyyy-MM-dd") } } catch {}
 
-# Processor
+# 处理器
 $processor = "Unknown"
 try {
     $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
@@ -68,7 +69,7 @@ try {
     if ($processor.Length -gt 45) { $processor = $processor.Substring(0, 45) + "..." }
 } catch {}
 
-# RAM
+# 内存
 $ram = "Unknown"
 try {
     $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
@@ -76,7 +77,7 @@ try {
     $ram = "$totalGB GB"
 } catch {}
 
-# Storage (C:)
+# 磁盘 C:
 $storage = "Unknown"
 try {
     $cDrive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'" -ErrorAction Stop
@@ -97,6 +98,28 @@ if ($passString -ne "8888") {
     exit
 }
 
+# ------------------------------------------------------------
+#  下载函数（带回退地址）
+# ------------------------------------------------------------
+function Get-MASScript {
+    $primaryUrl   = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd"
+    $fallbackUrl  = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
+
+    try {
+        Write-Host "  Downloading latest MAS script..." -ForegroundColor Gray
+        $raw = Invoke-RestMethod -Uri $primaryUrl -ErrorAction Stop
+        if ($raw -match 'MAS_AIO') { return $raw }
+    } catch {}
+
+    try {
+        Write-Host "  Primary URL failed, trying fallback..." -ForegroundColor Yellow
+        $raw = Invoke-RestMethod -Uri $fallbackUrl -ErrorAction Stop
+        if ($raw -match 'MAS_AIO') { return $raw }
+    } catch {}
+
+    throw "Unable to download MAS script from any known URL. Please check your internet connection or contact support."
+}
+
 function Start-Activation {
     param([string]$Mode, [string]$FriendlyName)
     Write-Host "`n  [+] Access Granted! Starting $FriendlyName..." -ForegroundColor Green
@@ -104,15 +127,16 @@ function Start-Activation {
     $tempAIO   = "$env:TEMP\THE_ONE_AIO.cmd"
     $tempRun   = "$env:TEMP\THE_ONE_RUN.cmd"
     $flagFile  = "$env:TEMP\THE_ONE_EXIT.flag"
-    $url = "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd"
 
     try {
-        $raw = Invoke-RestMethod -Uri $url -ErrorAction Stop
-        if ($raw -notmatch 'MAS_AIO') { throw "Downloaded script is invalid (missing marker)." }
+        # 获取脚本（自动回退）
+        $raw = Get-MASScript
 
+        # 提取版本号
         $ver = '?.?'
         if ($raw -match 'set\s+masver=([\d.]+)') { $ver = $Matches[1] }
 
+        # 只修改标题
         $raw = $raw -replace '(?im)^title .*$', "title  THE ONE SYSTEMS v$ver"
         $raw = $raw -replace '(?<!\r)\n', "`r`n"
         if (-not $raw.EndsWith("`r`n")) { $raw += "`r`n" }
@@ -196,7 +220,6 @@ function Invoke-DeepClean {
 }
 
 function Exit-And-Clean {
-    # Final history cleanup
     try {
         $historyPaths = @(
             "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt"
@@ -211,14 +234,14 @@ function Exit-And-Clean {
 
 function Get-MASVersion {
     try {
-        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version-KL/MAS_AIO.cmd" -ErrorAction Stop
+        $raw = Invoke-RestMethod "https://raw.githubusercontent.com/massgravel/Microsoft-Activation-Scripts/master/MAS/All-In-One-Version/MAS_AIO.cmd" -ErrorAction Stop
         if ($raw -match 'set\s+masver=([\d.]+)') { return $Matches[1] }
     } catch {}
     return "?.?"
 }
 
 # ------------------------------------------------------------
-#  MODERN CLEAN UI
+#  现代简洁界面
 # ------------------------------------------------------------
 while ($true) {
     $masver = Get-MASVersion
