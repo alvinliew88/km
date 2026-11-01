@@ -1,16 +1,21 @@
-# 1. 强制管理员权限验证与自动提权
+# Clear PSReadLine history so pressing Up Arrow doesn't show the irm command
+if (Get-Module PSReadLine) {
+    Remove-History -ErrorAction SilentlyContinue
+    Set-PSReadLineOption -HistorySavePath $null -ErrorAction SilentlyContinue
+}
+
+# 1. Force Administrator Elevation Check
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Warning "Requesting Administrative Privileges..."
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/alvinliew88/km/main/launcher.ps1 | iex`"" -Verb RunAs
+    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm irm.lcm.my|iex`"" -Verb RunAs
     exit
 }
 
-# 2. 带有倒计时和星号掩码的底层输入监听器
+# Custom input reader with 30-second idle timeout
 function Read-ConsoleInput {
     param (
         [string]$Prompt,
-        [int]$Timeout = 30,
-        [switch]$IsPassword
+        [int]$Timeout = 30
     )
     Write-Host $Prompt -NoNewline
     $inputStr = ""
@@ -29,14 +34,11 @@ function Read-ConsoleInput {
                 }
             } else {
                 $inputStr += $key.KeyChar
-                if ($IsPassword) { Write-Host "*" -NoNewline }
-                else { Write-Host $key.KeyChar -NoNewline }
+                Write-Host $key.KeyChar -NoNewline
             }
-            # 每次按键重置30秒倒计时
             $start = Get-Date
         }
         
-        # 检测是否超时
         if ((Get-Date).Subtract($start).TotalSeconds -ge $Timeout) {
             return $null
         }
@@ -44,31 +46,7 @@ function Read-ConsoleInput {
     }
 }
 
-# 3. 严格的密码验证模块 (超时或错误直接退出)
-Clear-Host
-Write-Host "===================================================" -ForegroundColor Red
-Write-Host "   RESTRICTED ACCESS - AUTHORIZATION REQUIRED" -ForegroundColor Yellow
-Write-Host "===================================================" -ForegroundColor Red
-Write-Host "You have 30 seconds to authenticate." -ForegroundColor DarkGray
-Write-Host ""
-
-$pwd = Read-ConsoleInput -Prompt "Enter Password: " -Timeout 30 -IsPassword
-
-if ($null -eq $pwd) {
-    Write-Host "`n[Timeout] 30 seconds idle. Closing terminal..." -ForegroundColor DarkGray
-    Start-Sleep -Seconds 1
-    exit
-}
-if ($pwd -ne "8888") {
-    Write-Host "`n[Access Denied] Incorrect password. Closing terminal..." -ForegroundColor Red
-    Start-Sleep -Seconds 1
-    exit
-}
-
-Write-Host "Access Granted." -ForegroundColor Green
-Start-Sleep -Seconds 1
-
-# 4. 优化功能块
+# 2. Optimization Function Suite
 function Run-OptimizationSuite {
     Clear-Host
     Write-Host "===================================================" -ForegroundColor Cyan
@@ -107,7 +85,7 @@ function Run-OptimizationSuite {
     Write-Host "===================================================" -ForegroundColor Cyan
 }
 
-# 5. 主菜单循环 (带30秒空闲检测)
+# 3. Main Menu Loop (with 30-second inactivity timeout)
 while ($true) {
     Clear-Host
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
@@ -126,7 +104,6 @@ while ($true) {
     Write-Host "[0] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
     
-    # 30秒无操作则退出主菜单
     $choice = Read-ConsoleInput -Prompt "> Select module: " -Timeout 30
     
     if ($null -eq $choice) {
