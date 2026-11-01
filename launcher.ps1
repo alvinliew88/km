@@ -5,7 +5,28 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     exit
 }
 
-# 2. 优化功能块
+# 2. 密码验证模块
+$authenticated = $false
+Clear-Host
+Write-Host "===================================================" -ForegroundColor Red
+Write-Host "   RESTRICTED ACCESS - AUTHORIZATION REQUIRED" -ForegroundColor Yellow
+Write-Host "===================================================" -ForegroundColor Red
+
+do {
+    $password = Read-Host -AsSecureString "Enter Password"
+    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
+    
+    if ($plainPassword -eq "8888") {
+        $authenticated = $true
+        Write-Host "Access Granted." -ForegroundColor Green
+        Start-Sleep -Seconds 1
+    } else {
+        Write-Host "Incorrect Password. Try again." -ForegroundColor Red
+    }
+} while (-not $authenticated)
+
+
+# 3. 优化功能块
 function Run-OptimizationSuite {
     Clear-Host
     Write-Host "===================================================" -ForegroundColor Cyan
@@ -42,10 +63,9 @@ function Run-OptimizationSuite {
     Write-Host "===================================================" -ForegroundColor Cyan
     Write-Host "   Optimization Complete! Returning to Terminal.   " -ForegroundColor Cyan
     Write-Host "===================================================" -ForegroundColor Cyan
-    Read-Host "Press Enter to return to Main Menu..."
 }
 
-# 3. 主菜单
+# 4. 主菜单循环
 while ($true) {
     Clear-Host
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
@@ -70,19 +90,16 @@ while ($true) {
         '1' { 
             Write-Host "Activating Windows via MAS HWID..." -ForegroundColor Yellow
             & ([ScriptBlock]::Create((irm https://get.activated.win))) /HWID
-            Read-Host "Press Enter to return..." 
         }
         '2' { 
             Write-Host "Activating Office via MAS Ohook..." -ForegroundColor Yellow
             & ([ScriptBlock]::Create((irm https://get.activated.win))) /Ohook
-            Read-Host "Press Enter to return..." 
         }
         '3' { 
             Write-Host "Clearing System Temp Files..." -ForegroundColor Yellow
             Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
             Remove-Item -Path "$env:windir\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
             Write-Host "Cleanup Complete." -ForegroundColor Green
-            Read-Host "Press Enter to return..." 
         }
         '4' { 
             Write-Host "Downloading and executing Ohook_Activation_AIO.cmd from GitHub..." -ForegroundColor Yellow
@@ -98,7 +115,6 @@ while ($true) {
             winget install -e --id VideoLAN.VLC --accept-source-agreements --accept-package-agreements
             winget install -e --id WhatsApp.WhatsApp --accept-source-agreements --accept-package-agreements
             Write-Host "Installation Complete." -ForegroundColor Green
-            Read-Host "Press Enter to return..." 
         }
         '6' { 
             Write-Host "Removing pre-installed bloatware (TikTok, Instagram, etc.)..." -ForegroundColor Yellow
@@ -106,15 +122,26 @@ while ($true) {
             Get-AppxPackage *Instagram* | Remove-AppxPackage -ErrorAction SilentlyContinue
             Get-AppxPackage *Facebook* | Remove-AppxPackage -ErrorAction SilentlyContinue
             Write-Host "Bloatware removed safely." -ForegroundColor Green
-            Read-Host "Press Enter to return..." 
         }
-        '7' { Run-OptimizationSuite }
+        '7' { 
+            Run-OptimizationSuite 
+        }
         '8' { 
-              Clear-Host
-              Write-Host "Initiating Immediate System Restart..." -ForegroundColor Red
-              Restart-Computer -Force 
-            }
-        '0' { exit }
-        default {}
+            Clear-Host
+            Write-Host "Initiating Immediate System Restart..." -ForegroundColor Red
+            Restart-Computer -Force 
+        }
+        '0' { 
+            exit 
+        }
+        default {
+            Write-Host "Invalid option. Please try again." -ForegroundColor Red
+        }
+    }
+    
+    # 防止脚本跑飞，强制等待用户确认后再重绘菜单
+    if ($choice -ne '8' -and $choice -ne '0') {
+        Write-Host "`nOperation finished." -ForegroundColor Cyan
+        Read-Host "Press Enter to return to Main Menu..."
     }
 }
