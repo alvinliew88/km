@@ -5,28 +5,70 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     exit
 }
 
-# 2. 密码验证模块
-$authenticated = $false
+# 2. 带有倒计时和星号掩码的底层输入监听器
+function Read-ConsoleInput {
+    param (
+        [string]$Prompt,
+        [int]$Timeout = 30,
+        [switch]$IsPassword
+    )
+    Write-Host $Prompt -NoNewline
+    $inputStr = ""
+    $start = Get-Date
+
+    while ($true) {
+        if ([console]::KeyAvailable) {
+            $key = [console]::ReadKey($true)
+            if ($key.Key -eq 'Enter') {
+                Write-Host ""
+                return $inputStr
+            } elseif ($key.Key -eq 'Backspace') {
+                if ($inputStr.Length -gt 0) {
+                    $inputStr = $inputStr.Substring(0, $inputStr.Length - 1)
+                    Write-Host "`b `b" -NoNewline
+                }
+            } else {
+                $inputStr += $key.KeyChar
+                if ($IsPassword) { Write-Host "*" -NoNewline }
+                else { Write-Host $key.KeyChar -NoNewline }
+            }
+            # 每次按键重置30秒倒计时
+            $start = Get-Date
+        }
+        
+        # 检测是否超时
+        if ((Get-Date).Subtract($start).TotalSeconds -ge $Timeout) {
+            return $null
+        }
+        Start-Sleep -Milliseconds 50
+    }
+}
+
+# 3. 严格的密码验证模块 (超时或错误直接退出)
 Clear-Host
 Write-Host "===================================================" -ForegroundColor Red
 Write-Host "   RESTRICTED ACCESS - AUTHORIZATION REQUIRED" -ForegroundColor Yellow
 Write-Host "===================================================" -ForegroundColor Red
+Write-Host "You have 30 seconds to authenticate." -ForegroundColor DarkGray
+Write-Host ""
 
-do {
-    $password = Read-Host -AsSecureString "Enter Password"
-    $plainPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
-    
-    if ($plainPassword -eq "8888") {
-        $authenticated = $true
-        Write-Host "Access Granted." -ForegroundColor Green
-        Start-Sleep -Seconds 1
-    } else {
-        Write-Host "Incorrect Password. Try again." -ForegroundColor Red
-    }
-} while (-not $authenticated)
+$pwd = Read-ConsoleInput -Prompt "Enter Password: " -Timeout 30 -IsPassword
 
+if ($null -eq $pwd) {
+    Write-Host "`n[Timeout] 30 seconds idle. Closing terminal..." -ForegroundColor DarkGray
+    Start-Sleep -Seconds 1
+    exit
+}
+if ($pwd -ne "8888") {
+    Write-Host "`n[Access Denied] Incorrect password. Closing terminal..." -ForegroundColor Red
+    Start-Sleep -Seconds 1
+    exit
+}
 
-# 3. 优化功能块
+Write-Host "Access Granted." -ForegroundColor Green
+Start-Sleep -Seconds 1
+
+# 4. 优化功能块
 function Run-OptimizationSuite {
     Clear-Host
     Write-Host "===================================================" -ForegroundColor Cyan
@@ -65,7 +107,7 @@ function Run-OptimizationSuite {
     Write-Host "===================================================" -ForegroundColor Cyan
 }
 
-# 4. 主菜单循环
+# 5. 主菜单循环 (带30秒空闲检测)
 while ($true) {
     Clear-Host
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
@@ -84,7 +126,14 @@ while ($true) {
     Write-Host "[0] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
     
-    $choice = Read-Host "> Select module"
+    # 30秒无操作则退出主菜单
+    $choice = Read-ConsoleInput -Prompt "> Select module: " -Timeout 30
+    
+    if ($null -eq $choice) {
+        Write-Host "`n[Timeout] 30 seconds idle. Closing terminal..." -ForegroundColor DarkGray
+        Start-Sleep -Seconds 1
+        exit
+    }
     
     switch ($choice) {
         '1' { 
@@ -123,25 +172,21 @@ while ($true) {
             Get-AppxPackage *Facebook* | Remove-AppxPackage -ErrorAction SilentlyContinue
             Write-Host "Bloatware removed safely." -ForegroundColor Green
         }
-        '7' { 
-            Run-OptimizationSuite 
-        }
+        '7' { Run-OptimizationSuite }
         '8' { 
             Clear-Host
             Write-Host "Initiating Immediate System Restart..." -ForegroundColor Red
             Restart-Computer -Force 
         }
-        '0' { 
-            exit 
-        }
+        '0' { exit }
         default {
             Write-Host "Invalid option. Please try again." -ForegroundColor Red
         }
     }
     
-    # 防止脚本跑飞，强制等待用户确认后再重绘菜单
     if ($choice -ne '8' -and $choice -ne '0') {
         Write-Host "`nOperation finished." -ForegroundColor Cyan
-        Read-Host "Press Enter to return to Main Menu..."
+        $returnWait = Read-ConsoleInput -Prompt "Press Enter to return to Main Menu... (30s timeout)" -Timeout 30
+        if ($null -eq $returnWait) { exit }
     }
 }
