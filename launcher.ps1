@@ -1,7 +1,10 @@
-# 1. 自动清除键盘向上方向键的历史记录
+# 1. 物理清空键盘向上方向键的历史记录，彻底防泄漏
 if (Get-Module PSReadLine) {
-    Remove-History -ErrorAction SilentlyContinue
-    Set-PSReadLineOption -HistorySavePath $null -ErrorAction SilentlyContinue
+    [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
+    $HistoryFilePath = (Get-PSReadLineOption).HistorySavePath
+    if ($null -ne $HistoryFilePath -and (Test-Path $HistoryFilePath)) {
+        Clear-Content -Path $HistoryFilePath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # 2. 强制管理员提权
@@ -10,19 +13,23 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     exit
 }
 
-# 3. 调用底层 API：强制将 CMD/PowerShell 窗口拉到屏幕最前方，不被 Chrome 挡住
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-public class Win32 {
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("kernel32.dll")]
-    public static extern IntPtr GetConsoleWindow();
-}
-"@
-[Win32]::SetForegroundWindow([Win32]::GetConsoleWindow()) | Out-Null
+# 3. 强制窗口顶层显示 (带静默容错，过滤所有红色警告)
+try {
+    if (-not ([System.Management.Automation.PSTypeName]'TopWindowAPI').Type) {
+        Add-Type -TypeDefinition @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class TopWindowAPI {
+            [DllImport("user32.dll")]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            public static extern bool SetForegroundWindow(IntPtr hWnd);
+            [DllImport("kernel32.dll")]
+            public static extern IntPtr GetConsoleWindow();
+        }
+"@ -ErrorAction SilentlyContinue
+    }
+    [TopWindowAPI]::SetForegroundWindow([TopWindowAPI]::GetConsoleWindow()) | Out-Null
+} catch {}
 
 # 4. 倒计时输入监听器 (带星号掩码)
 function Read-ConsoleInput {
@@ -61,20 +68,16 @@ function Read-ConsoleInput {
     }
 }
 
-# 5. 极简密码锁验证 (只显示 $)
+# 5. 极简密码锁验证 (只显示 $ 符号)
 Clear-Host
 $pwd = Read-ConsoleInput -Prompt "$ " -Timeout 30 -IsPassword
 
-# 如果密码不是 8888 或者超时 30 秒没有操作，直接安全退出
 if ($null -eq $pwd -or $pwd -ne "8888") {
     exit
 }
 
-Clear-Host
-
 # 6. 核心优化函数
 function Run-OptimizationSuite {
-    Clear-Host
     Write-Host "===================================================" -ForegroundColor Cyan
     Write-Host "   THE ONE SYSTEMS - Ultimate Optimization Suite   " -ForegroundColor Cyan
     Write-Host "===================================================" -ForegroundColor Cyan
@@ -107,11 +110,34 @@ function Run-OptimizationSuite {
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     
     Write-Host "===================================================" -ForegroundColor Cyan
-    Write-Host "   Optimization Complete! Returning to Terminal.   " -ForegroundColor Cyan
+    Write-Host "   Optimization Complete!                          " -ForegroundColor Cyan
     Write-Host "===================================================" -ForegroundColor Cyan
 }
 
-# 7. 主菜单循环设计
+# 7. 卸载无用软件及 Copilot/OneDrive 核心逻辑块
+function Run-BloatwareRemoval {
+    Write-Host "Disabling Copilot & Telemetry..." -ForegroundColor Yellow
+    $CopilotPath = "HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot"
+    if (!(Test-Path $CopilotPath)) { New-Item -Path $CopilotPath -Force | Out-Null }
+    Set-ItemProperty -Path $CopilotPath -Name "TurnOffWindowsCopilot" -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ShowCopilotButton" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+    
+    Write-Host "Terminating and Uninstalling OneDrive..." -ForegroundColor Yellow
+    Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OneDrive" -ErrorAction SilentlyContinue
+    $onedrive32 = "$env:SystemRoot\System32\OneDriveSetup.exe"
+    $onedrive64 = "$env:SystemRoot\SysWOW64\OneDriveSetup.exe"
+    if (Test-Path $onedrive64) { Start-Process $onedrive64 -ArgumentList "/uninstall" -Wait -NoNewWindow -ErrorAction SilentlyContinue }
+    elseif (Test-Path $onedrive32) { Start-Process $onedrive32 -ArgumentList "/uninstall" -Wait -NoNewWindow -ErrorAction SilentlyContinue }
+    Get-AppxPackage *OneDriveSync* | Remove-AppxPackage -ErrorAction SilentlyContinue
+
+    Write-Host "Removing Social Media Bloatware..." -ForegroundColor Yellow
+    Get-AppxPackage *TikTok* | Remove-AppxPackage -ErrorAction SilentlyContinue
+    Get-AppxPackage *Instagram* | Remove-AppxPackage -ErrorAction SilentlyContinue
+    Get-AppxPackage *Facebook* | Remove-AppxPackage -ErrorAction SilentlyContinue
+}
+
+# 8. 主菜单循环
 while ($true) {
     Clear-Host
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
@@ -124,17 +150,16 @@ while ($true) {
     Write-Host "[3] THE ONE PC Optimization (Clear Temp & Cache)" -ForegroundColor Green
     Write-Host "[4] Full THE ONE Activation Suite (Run Local .cmd)" -ForegroundColor Green
     Write-Host "[5] Install Essential Apps (WinGet)" -ForegroundColor Green
-    Write-Host "[6] Remove Bulky Windows Apps (Safe)" -ForegroundColor Green
+    Write-Host "[6] Remove Bloatware, OneDrive & Copilot (Speed Up)" -ForegroundColor Green
     Write-Host "[7] Enable MM Agent & Full Optimization Suite" -ForegroundColor Green
     Write-Host "[8] Restart PC Immediately" -ForegroundColor Red
+    Write-Host "[9] One-Click ALL Optimizations (Modules 3 + 6 + 7)" -ForegroundColor Magenta
     Write-Host "[0] Exit Terminal" -ForegroundColor DarkGray
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
     
     $choice = Read-ConsoleInput -Prompt "> Select module: " -Timeout 30
     
-    if ($null -eq $choice) {
-        exit
-    }
+    if ($null -eq $choice) { exit }
     
     switch ($choice) {
         '1' { 
@@ -167,17 +192,31 @@ while ($true) {
             Write-Host "Installation Complete." -ForegroundColor Green
         }
         '6' { 
-            Write-Host "Removing pre-installed bloatware (TikTok, Instagram, etc.)..." -ForegroundColor Yellow
-            Get-AppxPackage *TikTok* | Remove-AppxPackage -ErrorAction SilentlyContinue
-            Get-AppxPackage *Instagram* | Remove-AppxPackage -ErrorAction SilentlyContinue
-            Get-AppxPackage *Facebook* | Remove-AppxPackage -ErrorAction SilentlyContinue
-            Write-Host "Bloatware removed safely." -ForegroundColor Green
+            Run-BloatwareRemoval
+            Write-Host "Bloatware & Background Services removed safely." -ForegroundColor Green
         }
-        '7' { Run-OptimizationSuite }
+        '7' { 
+            Clear-Host
+            Run-OptimizationSuite 
+        }
         '8' { 
             Clear-Host
             Write-Host "Initiating Immediate System Restart..." -ForegroundColor Red
             Restart-Computer -Force 
+        }
+        '9' {
+            Clear-Host
+            Write-Host "--- STEP 1: CLEARING SYSTEM TEMP FILES ---" -ForegroundColor Yellow
+            Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item -Path "$env:windir\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "Cleanup Complete.`n" -ForegroundColor Green
+            
+            Write-Host "--- STEP 2: REMOVING BLOATWARE & COPILOT/ONEDRIVE ---" -ForegroundColor Yellow
+            Run-BloatwareRemoval
+            Write-Host "Bloatware removed.`n" -ForegroundColor Green
+            
+            Write-Host "--- STEP 3: SYSTEM OPTIMIZATION ---" -ForegroundColor Yellow
+            Run-OptimizationSuite
         }
         '0' { exit }
         default {
