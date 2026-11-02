@@ -1,16 +1,30 @@
-# Clear PSReadLine history
+# 1. 自动清除键盘向上方向键的历史记录
 if (Get-Module PSReadLine) {
     Remove-History -ErrorAction SilentlyContinue
     Set-PSReadLineOption -HistorySavePath $null -ErrorAction SilentlyContinue
 }
 
-# 1. Silent Administrator Elevation Check
+# 2. 强制管理员提权
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm irm.lcm.my|iex`"" -Verb RunAs
+    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"irm https://raw.githubusercontent.com/alvinliew88/km/main/launcher.ps1 | iex`"" -Verb RunAs
     exit
 }
 
-# Custom input reader with 30-second idle timeout
+# 3. 调用底层 API：强制将 CMD/PowerShell 窗口拉到屏幕最前方，不被 Chrome 挡住
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class Win32 {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetConsoleWindow();
+}
+"@
+[Win32]::SetForegroundWindow([Win32]::GetConsoleWindow()) | Out-Null
+
+# 4. 倒计时输入监听器 (带星号掩码)
 function Read-ConsoleInput {
     param (
         [string]$Prompt,
@@ -47,17 +61,18 @@ function Read-ConsoleInput {
     }
 }
 
-# 2. Silent Password Gate
+# 5. 极简密码锁验证 (只显示 $)
 Clear-Host
 $pwd = Read-ConsoleInput -Prompt "$ " -Timeout 30 -IsPassword
 
+# 如果密码不是 8888 或者超时 30 秒没有操作，直接安全退出
 if ($null -eq $pwd -or $pwd -ne "8888") {
     exit
 }
 
 Clear-Host
 
-# 3. Optimization Function Suite
+# 6. 核心优化函数
 function Run-OptimizationSuite {
     Clear-Host
     Write-Host "===================================================" -ForegroundColor Cyan
@@ -96,7 +111,7 @@ function Run-OptimizationSuite {
     Write-Host "===================================================" -ForegroundColor Cyan
 }
 
-# 4. Main Menu Loop (with 30-second inactivity timeout)
+# 7. 主菜单循环设计
 while ($true) {
     Clear-Host
     Write-Host "---------------------------------------------------" -ForegroundColor Cyan
