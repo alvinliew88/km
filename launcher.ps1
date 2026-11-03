@@ -1,4 +1,4 @@
-# 1. 物理清空键盘向上方向键的历史记录，彻底防泄漏
+# 1. 物理清空键盘向上方向键的历史记录
 if (Get-Module PSReadLine) {
     [Microsoft.PowerShell.PSConsoleReadLine]::ClearHistory()
     $HistoryFilePath = (Get-PSReadLineOption).HistorySavePath
@@ -13,7 +13,7 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
     exit
 }
 
-# 3. 强制窗口顶层显示 (带静默容错，过滤所有红色警告)
+# 3. 强制窗口顶层显示 (带静默容错)
 try {
     if (-not ([System.Management.Automation.PSTypeName]'TopWindowAPI').Type) {
         Add-Type -TypeDefinition @"
@@ -68,11 +68,11 @@ function Read-ConsoleInput {
     }
 }
 
-# 5. 极简密码锁验证 (只显示 $ 符号)
+# 5. 极简密码锁验证 (已修复系统变量冲突)
 Clear-Host
-$pwd = Read-ConsoleInput -Prompt "$ " -Timeout 30 -IsPassword
+$authCode = Read-ConsoleInput -Prompt "$ " -Timeout 30 -IsPassword
 
-if ($null -eq $pwd -or $pwd -ne "8888") {
+if ($null -eq $authCode -or $authCode -ne "8888") {
     exit
 }
 
